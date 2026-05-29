@@ -8,14 +8,3 @@ This repository contains a collection of AWS Lambda functions that support vario
 ## Folder Structure
 
 ```
-/
-|--addGroupToTokenGeneration
-|--addUserToEndUserGroup
-|--approveUser
-|--listCognitoUsers
-|--login
-|--rds-s3-trigger
-|--register
-|--trigger-appflow-lambda
-|--README.md
-```
