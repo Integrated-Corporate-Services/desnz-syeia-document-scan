@@ -1,9 +1,9 @@
 {
   "name": "desnz-syeia-document-scan",
-  "description": "uploaded files scan using ClamAV, triggered via SQS",
+  "description": "ECS task: virus-scans uploaded files using ClamAV, triggered via SQS",
   "version": "1.0.0",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "main": "dist/server.js",
   "scripts": {

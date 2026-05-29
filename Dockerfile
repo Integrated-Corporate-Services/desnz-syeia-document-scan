@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM public.ecr.aws/docker/library/node:20 AS builder
+FROM public.ecr.aws/docker/library/node:22 AS builder
 
 WORKDIR /app
 
