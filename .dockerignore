@@ -7,7 +7,6 @@ dist
 .env.*
 coverage
 .nyc_output
-local-dev-environment
 migrations
 docker-compose.yml
 Dockerfile
