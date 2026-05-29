@@ -17,7 +17,7 @@ RUN npm run build
 RUN test -f ./dist/server.js || (echo "ERROR: dist/server.js missing after build"; ls -R dist; exit 1)
 
 # ---- Runtime stage with ClamAV ----
-FROM public.ecr.aws/docker/library/node:20 AS runtime
+FROM public.ecr.aws/docker/library/node:22 AS runtime
 
 # Install ClamAV and dependencies
 RUN apt-get update && apt-get install -y \
