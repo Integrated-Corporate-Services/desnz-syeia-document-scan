@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+.env
+.env.*
+coverage
+.nyc_output
+local-dev-environment
+migrations
+docker-compose.yml
+Dockerfile
+.dockerignore
+jest.config.*
+tsconfig*.json
+eslint.config.*
