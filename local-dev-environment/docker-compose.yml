@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  ministack:
+    image: ministackorg/ministack:latest
+    container_name: ministack
+    ports:
+      - "4566:4566"
+    environment:
+      - MINISTACK_REGION=eu-west-2
+      - MINISTACK_ACCOUNT_ID=000000000000
+      - LOG_LEVEL=INFO
+    volumes:
+      - "./ministack-init:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4566/_ministack/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - virus-scan-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=appdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - "./postgres-init:/docker-entrypoint-initdb.d"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - virus-scan-network
+
+  backend:
+    build:
+      context: ../../desnz-syeia-backend-beta
+      dockerfile: Dockerfile
+    container_name: syeia-backend
+    ports:
+      - "3001:3001"
+    environment:
+      # Server Configuration
+      - HOST=localhost
+      - PORT=3001
+      - NODE_ENV=local
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      
+      # Database Configuration
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/appdb
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=appdb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=appdb
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGSSLMODE=disable
+      
+      # Frontend URLs
+      - FRONTEND_URL=http://localhost:5173
+      - FRONTEND_REDIRECT_URL_EXISTING_USER=http://localhost:5173/frontend/workbasket
+      - FRONTEND_REDIRECT_URL_NEW_USER=http://localhost:5173/frontend/request-access
+      - FRONTEND_REDIRECT_URL_UNAUTHORIZED=http://localhost:5173/frontend/unauthorized
+      
+      # Authentication Configuration
+      - SECURITY_ENABLED=false
+      - LOGIN_DISABLED=true
+      - DUMMY_USER_TYPE=APPLICANT_TEAM_COORDINATOR
+      - AUTH_BYPASS_ENABLED=true
+      - AUTH_BYPASS_SECRET=dev-bypass-secret-12345
+      - SESSION_SECRET=b7f2e8c1-4d3a-4e9b-8c2d-7a1e6b9c2d3f!@#XyZ$%2025abcDEFghIJklMNopQR
+      
+      # JWT Configuration
+      - JWT_ENABLED=true
+      - JWT_ALGORITHM=HS256
+      - JWT_SECRET=dev-jwt-secret-change-in-production-12345
+      - JWT_ISSUER=desnz-syeia-api
+      - JWT_AUDIENCE=desnz-syeia-backend
+      - JWT_EXPIRATION=3600
+      
+      # Salesforce Configuration
+      - SALESFORCE_API_ENABLED=false
+      - SALESFORCE_BASE_URL=https://saas-page-9942--qasyeia.sandbox.my.salesforce.com
+      - SALESFORCE_ORIGIN=https://eip-dev-external-1040853835.eu-west-2.elb.amazonaws.com
+      - SALESFORCE_INTEGRATION_SECRET=change-this-in-production
+      - SALESFORCE_RATE_LIMIT=100
+      
+      # GOV.UK Notify Configuration
+      - NOTIFY_ENABLED=false
+      - NOTIFY_API_KEY=8thsepemailkey-a18a7313-50a0-4ad5-bbc1-ae967340ebf0-efe139bf-5485-4993-b671-a12cc88c125d
+      - NOTIFY_APPLICATION_SUBMITTED_TEMPLATE_ID=623f00f7-e775-4cb0-9372-403f8fd57d55
+      - NOTIFY_ACCESS_APPROVED_TEMPLATE_ID=00000000-0000-0000-0000-000000000001
+      - NOTIFY_ACCESS_REJECTED_TEMPLATE_ID=00000000-0000-0000-0000-000000000002
+      - NOTIFY_DNO_COORDINATOR_EMAIL_TEMPLATE_ID=00000000-0000-0000-0000-000000000003
+      - NOTIFY_REVOKE_ACCESS_TEMPLATE_ID=00000000-0000-0000-0000-000000000004
+      - NOTIFY_RECIPIENTS=sagar.kumar@ics.gov.uk
+      
+      # OIDC Configuration (disabled for local dev)
+      - OIDC_CLIENT_ID=6iS2RPBnqmXO0fnJx4o5WJTIyWE
+      - OIDC_REDIRECT_URI=http://localhost:3001/backend/auth/callback
+      - OIDC_ISSUER_URL=http://localhost:3333/
+      - OIDC_TOKEN_ENDPOINT=http://localhost:3333/token
+      - OIDC_SCOPES=openid email
+      - OIDC_POST_LOGOUT_REDIRECT_URI=http://localhost:5173/frontend/signin
+      
+      # AWS Configuration
+      - AWS_REGION=eu-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://ministack:4566
+      - AWS_ENDPOINT_PUBLIC=http://localhost:4566
+      - AWS_S3_BUCKET=s3-eip-dev-storage
+      - S3_UPLOADS_BUCKET=uploads-pre-scan
+      - S3_CLEAN_BUCKET=uploads-clean
+      - S3_QUARANTINE_BUCKET=uploads-quarantine
+      - S3_URL_EXPIRY_SECONDS=900
+      - SNS_TOPIC_ARN=arn:aws:sns:eu-west-2:927122664124:rds-salesforce-trigger-EIP-dev
+      
+      # GOV Pay Configuration
+      - GOVPAY_API_URL=https://publicapi.payments.service.gov.uk/v1/payments
+      - GOVPAY_API_KEY=api_test_2994qspmsf5ue9uk3v5kq7u2kdrootumj81120lgf0s2q7lr0582mialjv
+      - GOVPAY_RETURN_URL=http://localhost:5173/frontend/payment/callback
+      
+      # Logging
+      - LOG_LEVEL=debug
+      - VITE_SANDBOX_ROUTES_ENABLED=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ministack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - virus-scan-network
+    volumes:
+      - ../../desnz-syeia-backend-beta/src:/app/src
+
+  scan-worker-ecs:
+    build:
+      context: ../../virus-scan
+      dockerfile: Dockerfile.ecs
+    container_name: scan-worker-ecs
+    environment:
+      # Connect to LOCAL PostgreSQL on host machine (not Docker container)
+      - PGHOST=host.docker.internal
+      - PGPORT=5432
+      - PGDATABASE=appdb
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGSSLMODE=disable
+      - DB_POOL_SIZE=5
+      - AWS_REGION=eu-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://ministack:4566
+      - S3_ENDPOINT=http://ministack:4566
+      - SQS_SCAN_QUEUE_URL=http://ministack:4566/000000000000/scan-queue
+      - SQS_POLL_WAIT_SECONDS=10
+      - SQS_VISIBILITY_TIMEOUT=300
+      - S3_UPLOADS_BUCKET=uploads-pre-scan
+      - S3_CLEAN_BUCKET=uploads-clean
+      - S3_QUARANTINE_BUCKET=uploads-quarantine
+      - SIMULATE_SCAN=true
+      - LOG_LEVEL=debug
+      - NODE_ENV=local
+    depends_on:
+      ministack:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - virus-scan-network
+    volumes:
+      - clamav-data:/var/lib/clamav
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres-data:
+  clamav-data:
+
+networks:
+  virus-scan-network:
+    driver: bridge
