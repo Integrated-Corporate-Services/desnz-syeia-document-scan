@@ -7,7 +7,7 @@ echo "================================"
 
 # Check if we're in simulation mode
 if [ "$SIMULATE_SCAN" = "true" ]; then
-  echo "⚠ SIMULATE_SCAN is enabled - skipping ClamAV initialization"
+  echo "SIMULATE_SCAN is enabled - skipping ClamAV initialization"
   echo "  Files will be marked as clean without actual scanning"
   echo ""
   echo "================================"
