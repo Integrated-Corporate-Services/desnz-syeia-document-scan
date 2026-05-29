@@ -1,0 +1,43 @@
+{
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "deploy": "npm run build && zip -r lambda.zip dist package.json package-lock.json node_modules && echo 'Upload lambda.zip to AWS Lambda'",
+    "lint": "eslint . --ext .ts,.js",
+    "lint:fix": "eslint . --ext .ts,.js --fix",
+    "type-check": "tsc --noEmit",
+    "start": "node dist/test-local.js",
+    "dev": "npm run build && node dist/test-local.js"
+  },
+  "description": "Lambda for scanning uploaded files for viruses using ClamAV",
+  "version": "1.0.0",
+  "engines": {
+    "node": "18.x"
+  },
+  "name": "virus-scan-lambda",
+  "main": "dist/handler.js",
+  "types": "dist/handler.d.ts",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.161",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.19.0",
+    "@types/pg": "^8.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/client-sqs": "^3.0.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.20.0",
+    "winston": "^3.11.0"
+  }
+}

@@ -1,0 +1,195 @@
+import { Readable } from 'stream';
+import * as net from 'net';
+import { logDebug, logError, logInfo, logWarn } from '../../utils/logger.js';
+
+export interface ScanResultResponse {
+  isClean: boolean;
+  virusName: string | null;
+}
+
+export interface IClamAVClient {
+  scanStream(fileStream: Readable): Promise<ScanResultResponse>;
+}
+
+export class ClamAVClient implements IClamAVClient {
+  private readonly context = 'ClamAVClient';
+  private host: string;
+  private port: number;
+  private readonly simulateMode: boolean;
+
+  constructor() {
+    this.host = process.env.CLAMAV_HOST || 'localhost';
+    this.port = parseInt(process.env.CLAMAV_PORT || '3310');
+    this.simulateMode = process.env.SIMULATE_SCAN === 'true';
+
+    logInfo(this.context, 'ClamAV client initialized', {
+      host: this.host,
+      port: this.port,
+      simulateMode: this.simulateMode,
+    });
+  }
+
+  async scanStream(fileStream: Readable): Promise<ScanResultResponse> {
+    // Simulation mode for testing without real ClamAV
+    if (this.simulateMode) {
+      logInfo(this.context, 'Simulating virus scan (SIMULATE_SCAN=true)');
+      return this.simulateScan();
+    }
+
+    logInfo(this.context, 'Starting real virus scan', {
+      host: this.host,
+      port: this.port,
+    });
+
+    const startTime = Date.now();
+    let bytesScanned = 0;
+
+    return new Promise((resolve, reject) => {
+      const socket = net.createConnection(this.port, this.host);
+      let responseData = '';
+
+      socket.on('connect', () => {
+        logDebug(this.context, 'Connected to ClamAV daemon', {
+          host: this.host,
+          port: this.port,
+        });
+
+        socket.write('zINSTREAM\0');
+        logDebug(this.context, 'Sent INSTREAM command to ClamAV');
+        
+        fileStream.on('data', (chunk: Buffer) => {
+          const size = Buffer.alloc(4);
+          size.writeUInt32BE(chunk.length, 0);
+          socket.write(size);
+          socket.write(chunk);
+          bytesScanned += chunk.length;
+
+          if (bytesScanned % (1024 * 1024) === 0) { // Log every 1MB
+            logDebug(this.context, 'Scanning progress', {
+              bytesScanned,
+              megabytesScanned: (bytesScanned / (1024 * 1024)).toFixed(2),
+            });
+          }
+        });
+
+        fileStream.on('end', () => {
+          logDebug(this.context, 'File stream ended, sending terminator', {
+            totalBytesScanned: bytesScanned,
+          });
+
+          const terminator = Buffer.alloc(4);
+          terminator.writeUInt32BE(0, 0);
+          socket.write(terminator);
+        });
+
+        fileStream.on('error', (err) => {
+          logError(this.context, 'File stream error', err);
+          socket.destroy();
+          reject(err);
+        });
+      });
+
+      socket.on('data', (data: Buffer) => {
+        responseData += data.toString();
+        logDebug(this.context, 'Received data from ClamAV', {
+          dataLength: data.length,
+        });
+      });
+
+      socket.on('end', () => {
+        const duration = Date.now() - startTime;
+        logDebug(this.context, 'ClamAV response received', {
+          responseData,
+          duration,
+          bytesScanned,
+        });
+
+        try {
+          const result = this.parseResponse(responseData);
+          
+          logInfo(this.context, 'Virus scan completed', {
+            isClean: result.isClean,
+            virusName: result.virusName,
+            bytesScanned,
+            duration,
+            throughput: bytesScanned / (duration / 1000), // bytes per second
+          });
+
+          resolve(result);
+        } catch (error) {
+          logError(this.context, 'Failed to parse ClamAV response', error as Error, {
+            responseData,
+          });
+          reject(error);
+        }
+      });
+
+      socket.on('error', (err) => {
+        logError(this.context, 'ClamAV socket error', err, {
+          host: this.host,
+          port: this.port,
+          bytesScanned,
+        });
+        reject(err);
+      });
+
+      socket.on('timeout', () => {
+        logError(this.context, 'ClamAV socket timeout', undefined, {
+          host: this.host,
+          port: this.port,
+          bytesScanned,
+        });
+        socket.destroy();
+        reject(new Error('ClamAV connection timeout'));
+      });
+    });
+  }
+
+  private simulateScan(): ScanResultResponse {
+    logInfo(this.context, 'Simulating scan result (all files marked as clean)');
+    
+    // In simulation mode, all files are marked as clean
+    return {
+      isClean: true,
+      virusName: null,
+    };
+  }
+
+  private parseResponse(response: string): ScanResultResponse {
+    const trimmed = response.trim();
+    
+    logDebug(this.context, 'Parsing ClamAV response', {
+      response: trimmed,
+      length: trimmed.length,
+    });
+    
+    if (trimmed.includes('OK')) {
+      logInfo(this.context, 'File is clean (no virus detected)');
+      return {
+        isClean: true,
+        virusName: null,
+      };
+    }
+
+    if (trimmed.includes('FOUND')) {
+      const match = trimmed.match(/stream: (.+?) FOUND/);
+      const virusName = match ? match[1] || null : null;
+      
+      logWarn(this.context, 'Virus detected in file', {
+        virusName,
+        rawResponse: trimmed,
+      });
+
+      return {
+        isClean: false,
+        virusName,
+      };
+    }
+
+    logError(this.context, 'Unexpected ClamAV response format', undefined, {
+      response: trimmed,
+    });
+
+    throw new Error(`Unexpected ClamAV response: ${trimmed}`);
+  }
+}
