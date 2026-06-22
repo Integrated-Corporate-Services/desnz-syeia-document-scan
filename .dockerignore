@@ -12,5 +12,5 @@ docker-compose.yml
 Dockerfile
 .dockerignore
 jest.config.*
-tsconfig*.json
+tsconfig.test.json
 eslint.config.*
