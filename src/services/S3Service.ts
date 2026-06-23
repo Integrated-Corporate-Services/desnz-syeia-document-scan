@@ -1,11 +1,8 @@
 import { S3Client, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { logDebug, logError, logInfo } from '../../utils/logger.js';
-
-export interface IS3Service {
-  getFileStream(bucket: string, key: string): Promise<Readable>;
-  moveFile(sourceBucket: string, sourceKey: string, destinationKey: string): Promise<void>;
-}
+import { logDebug, logError, logInfo } from '../utils/logger.js';
+import type { IS3Service } from '../types/scan.types.js';
+import { AWS_CONSTANTS } from '../constants/aws.constants.js';
 
 export class S3Service implements IS3Service {
   private readonly context = 'S3Service';
@@ -13,7 +10,7 @@ export class S3Service implements IS3Service {
 
   constructor() {
     const config: any = {
-      region: process.env.AWS_REGION || 'eu-west-2',
+      region: process.env.AWS_REGION || AWS_CONSTANTS.DEFAULT_REGION,
     };
 
     if (process.env.S3_ENDPOINT) {
@@ -41,7 +38,11 @@ export class S3Service implements IS3Service {
   }
 
   async getFileStream(bucket: string, key: string): Promise<Readable> {
-    logInfo(this.context, 'Retrieving file stream from S3', {
+    logInfo(this.context, '[S3Service.ts][getFileStream] STARTS', {
+      bucket,
+      key,
+    });
+    logInfo(this.context, '[S3Service.ts][getFileStream] Retrieving file stream from S3', {
       bucket,
       key,
     });
@@ -57,14 +58,15 @@ export class S3Service implements IS3Service {
       const duration = Date.now() - startTime;
       
       if (!response.Body) {
-        logError(this.context, 'S3 response has no body', undefined, {
+        logError(this.context, '[S3Service.ts][getFileStream] S3 response has no body', undefined, {
           bucket,
           key,
         });
+        logError(this.context, '[S3Service.ts][getFileStream] ENDS with error');
         throw new Error('No body in S3 response');
       }
 
-      logInfo(this.context, 'File stream retrieved successfully', {
+      logInfo(this.context, '[S3Service.ts][getFileStream] File stream retrieved successfully', {
         bucket,
         key,
         contentLength: response.ContentLength,
@@ -72,26 +74,32 @@ export class S3Service implements IS3Service {
         duration,
       });
 
+      logInfo(this.context, '[S3Service.ts][getFileStream] ENDS');
       return response.Body as Readable;
     } catch (error) {
-      logError(this.context, 'Failed to retrieve file stream from S3', error as Error, {
+      logError(this.context, '[S3Service.ts][getFileStream] Failed to retrieve file stream from S3', error as Error, {
         bucket,
         key,
       });
+      logError(this.context, '[S3Service.ts][getFileStream] ENDS with error');
       throw error;
     }
   }
 
   async moveFile(sourceBucket: string, sourceKey: string, destinationKey: string): Promise<void> {
-    logInfo(this.context, 'Moving file in S3', {
+    logInfo(this.context, '[S3Service.ts][moveFile] STARTS', {
+      sourceBucket,
+      sourceKey,
+      destinationKey,
+    });
+    logInfo(this.context, '[S3Service.ts][moveFile] Moving file in S3', {
       sourceBucket,
       sourceKey,
       destinationKey,
     });
 
     try {
-      // Step 1: Copy file to destination
-      logDebug(this.context, 'Copying file to destination', {
+      logDebug(this.context, '[S3Service.ts][moveFile] Copying file to destination', {
         sourceBucket,
         sourceKey,
         destinationKey,
@@ -107,15 +115,14 @@ export class S3Service implements IS3Service {
       await this.client.send(copyCommand);
       const copyDuration = Date.now() - copyStartTime;
 
-      logInfo(this.context, 'File copied successfully', {
+      logInfo(this.context, '[S3Service.ts][moveFile] File copied successfully', {
         sourceBucket,
         sourceKey,
         destinationKey,
         duration: copyDuration,
       });
 
-      // Step 2: Delete source file
-      logDebug(this.context, 'Deleting source file', {
+      logDebug(this.context, '[S3Service.ts][moveFile] Deleting source file', {
         sourceBucket,
         sourceKey,
       });
@@ -129,18 +136,21 @@ export class S3Service implements IS3Service {
       await this.client.send(deleteCommand);
       const deleteDuration = Date.now() - deleteStartTime;
 
-      logInfo(this.context, 'File moved successfully', {
+      logInfo(this.context, '[S3Service.ts][moveFile] File moved successfully', {
         sourceBucket,
         sourceKey,
         destinationKey,
         totalDuration: copyDuration + deleteDuration,
       });
+      
+      logInfo(this.context, '[S3Service.ts][moveFile] ENDS');
     } catch (error) {
-      logError(this.context, 'Failed to move file in S3', error as Error, {
+      logError(this.context, '[S3Service.ts][moveFile] Failed to move file in S3', error as Error, {
         sourceBucket,
         sourceKey,
         destinationKey,
       });
+      logError(this.context, '[S3Service.ts][moveFile] ENDS with error');
       throw error;
     }
   }

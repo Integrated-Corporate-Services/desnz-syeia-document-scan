@@ -23,7 +23,6 @@ export const logger = createLogger({
   transports: []
 });
 
-// Add console transport with appropriate formatting
 if (isCloudEnv) {
   logger.add(new transports.Console({
     format: format.combine(
@@ -44,7 +43,6 @@ if (isCloudEnv) {
   }));
 }
 
-// Helper functions for structured logging
 export const logInfo = (context: string, message: string, meta?: Record<string, any>) => {
   logger.info(`[${context}] ${message}`, meta);
 };
