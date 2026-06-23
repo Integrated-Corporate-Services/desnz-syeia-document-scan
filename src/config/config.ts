@@ -1,39 +1,18 @@
-/**
- * Configuration module — desnz-syeia-document-scan
- *
- * Pattern (mirrors document-management-service/src/config/config.js):
- *   - Every value is read from an environment variable.
- *   - If the value is an SSM Parameter Store ARN ("arn:aws:ssm:…") the real
- *     value is fetched at runtime using the ECS task role.  This lets the infra
- *     team store secrets in SSM without ever writing them into the task
- *     definition as plain text.
- *   - Database *credentials* (username + password) come from a Secrets Manager
- *     secret whose JSON is injected by ECS as the DB_CREDENTIALS env var.
- *   - Non-secret config (host, port, bucket names, queue URL, region) comes
- *     directly from plain environment variables set in the task definition.
- *
- * Local development:
- *   All values are plain strings in .env.local — no SSM / Secrets Manager
- *   calls are made unless the value actually starts with "arn:aws:ssm:".
- */
-
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { logInfo } from '../utils/logger.js';
+import type { S3Config, SqsConfig, ClamavConfig } from '../types/aws.types.js';
+import type { DbConfig, DbCredentials, CachedSecret } from '../types/database.types.js';
+import { AWS_CONSTANTS } from '../constants/aws.constants.js';
+import { DATABASE_CONSTANTS } from '../constants/database.constants.js';
+import { WORKER_CONSTANTS } from '../constants/worker.constants.js';
 
-// ---------------------------------------------------------------------------
-// Region helper
-// ---------------------------------------------------------------------------
+const context = 'Config';
+
 export function getAwsRegion(): string {
-  return process.env.AWS_REGION || process.env.AWS_Region || 'eu-west-2';
+  return process.env.AWS_REGION || process.env.AWS_Region || AWS_CONSTANTS.DEFAULT_REGION;
 }
 
-// ---------------------------------------------------------------------------
-// SSM Parameter Store resolver
-//
-// If `param` is already a plain string (local dev / non-SSM env var) it is
-// returned as-is.  If it starts with "arn:aws:ssm:" the ECS task role is used
-// to fetch the decrypted value.
-// ---------------------------------------------------------------------------
 export async function getConfigValue(
   param: string | undefined,
   region: string = getAwsRegion()
@@ -48,13 +27,6 @@ export async function getConfigValue(
   return param;
 }
 
-// ---------------------------------------------------------------------------
-// Secrets Manager helper
-//
-// Parses a JSON secret ({"username":"…","password":"…"}).
-// In ECS the secret can be pre-injected as the DB_CREDENTIALS env var so this
-// function is only called when the value isn't already in the environment.
-// ---------------------------------------------------------------------------
 export async function getSecretConfig(
   secretArn: string,
   region: string = getAwsRegion()
@@ -80,62 +52,23 @@ export async function getSecretConfig(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Database config (non-credential values only)
-//
-// host / port / database name are never secrets — they come from plain env
-// vars set in the ECS task definition.
-// ---------------------------------------------------------------------------
-export interface DbConfig {
-  host: string;
-  port: number;
-  database: string;
-  /** Only populated in local dev (DB_USER / DB_PASSWORD plain env vars). */
-  user?: string;
-  password?: string;
-  appName: string;
-  poolMax: number;
-  idleTimeoutMillis: number;
-  connectionTimeoutMillis: number;
-  queryTimeout: number;
-}
-
 export function getDbConfig(): DbConfig {
   return {
     host: process.env.DB_HOST ?? process.env.PGHOST ?? '',
-    port: Number(process.env.DB_PORT ?? process.env.PGPORT ?? 5432),
+    port: Number(process.env.DB_PORT ?? process.env.PGPORT ?? DATABASE_CONSTANTS.DEFAULT_PORT),
     database: process.env.DB_NAME ?? process.env.PGDATABASE ?? '',
     user: process.env.DB_USER ?? process.env.PGUSER,
     password: process.env.DB_PASSWORD ?? process.env.PGPASSWORD,
     appName: process.env.APP_NAME ?? 'document-scan-worker',
-    poolMax: Number(process.env.DB_POOL_MAX ?? process.env.DB_POOL_SIZE ?? 5),
-    idleTimeoutMillis: Number(process.env.DB_IDLE_MS ?? 20_000),
-    connectionTimeoutMillis: Number(process.env.DB_CONN_MS ?? 10_000),
+    poolMax: Number(process.env.DB_POOL_MAX ?? process.env.DB_POOL_SIZE ?? DATABASE_CONSTANTS.DEFAULT_POOL_SIZE),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_MS ?? DATABASE_CONSTANTS.DEFAULT_IDLE_TIMEOUT_MS),
+    connectionTimeoutMillis: Number(process.env.DB_CONN_MS ?? DATABASE_CONSTANTS.DEFAULT_CONNECTION_TIMEOUT_MS),
     queryTimeout: Number(process.env.DB_QUERY_MS ?? 30_000),
   };
 }
 
-// ---------------------------------------------------------------------------
-// DB credentials from Secrets Manager
-//
-// In ECS production: the task definition "secrets" block injects the Secrets
-// Manager JSON as DB_CREDENTIALS.  The JSON must be {"username":"…","password":"…"}.
-//
-// In local dev: DB_CREDENTIALS is not set — getDbConfig() returns plain
-// DB_USER / DB_PASSWORD values instead.
-// ---------------------------------------------------------------------------
-interface DbCredentials {
-  username: string;
-  password: string;
-}
-
-interface CachedSecret {
-  value: DbCredentials;
-  fetchedAt: number;
-}
-
 let _cachedDbSecret: CachedSecret | null = null;
-const SECRET_TTL_MS = Number(process.env.DB_SECRET_TTL_MS ?? 10 * 60 * 1000); // 10 min
+const SECRET_TTL_MS = Number(process.env.DB_SECRET_TTL_MS ?? AWS_CONSTANTS.SECRET_TTL_MS);
 
 function _needRefreshSecret(): boolean {
   if (!_cachedDbSecret) return true;
@@ -146,14 +79,11 @@ export async function getDbSecretConfig(): Promise<DbCredentials> {
   const raw = process.env.DB_CREDENTIALS;
   if (!raw) throw new Error('Missing env var DB_CREDENTIALS (Secrets Manager secret JSON).');
 
-  // ECS injects the resolved secret JSON directly — try parsing before hitting
-  // Secrets Manager API.
   if (!raw.startsWith('arn:aws:secretsmanager:')) {
     try {
       const parsed = JSON.parse(raw) as DbCredentials;
       if (parsed.username && parsed.password) return parsed;
     } catch {
-      // fall through to Secrets Manager fetch
     }
   }
 
@@ -167,27 +97,12 @@ export async function getDbSecretConfig(): Promise<DbCredentials> {
   return parsed;
 }
 
-// ---------------------------------------------------------------------------
-// S3 config
-// ---------------------------------------------------------------------------
-export interface S3Config {
-  region: string;
-  uploadsBucket: string;
-  cleanBucket: string;
-  quarantineBucket: string;
-  /** Only set in local dev to point at LocalStack. */
-  endpoint?: string;
-}
-
 export function getS3Config(): S3Config {
-  // Support both variable naming conventions:
-  // - S3_UPLOADS_BUCKET / S3_CLEAN_BUCKET / S3_QUARANTINE_BUCKET (preferred)
-  // - UPLOAD_BUCKET / CLEAN_BUCKET / QUARANTINE_BUCKET (ECS task definition)
   const uploadsBucket = process.env.S3_UPLOADS_BUCKET ?? process.env.UPLOAD_BUCKET ?? '';
   const cleanBucket = process.env.S3_CLEAN_BUCKET ?? process.env.CLEAN_BUCKET ?? '';
   const quarantineBucket = process.env.S3_QUARANTINE_BUCKET ?? process.env.QUARANTINE_BUCKET ?? '';
   
-  console.log('[S3Config] Resolved configuration:', {
+  logInfo(context, 'S3Config resolved', {
     uploadsBucket: uploadsBucket || '(NOT SET)',
     cleanBucket: cleanBucket || '(NOT SET)',
     quarantineBucket: quarantineBucket || '(NOT SET)',
@@ -204,25 +119,10 @@ export function getS3Config(): S3Config {
   };
 }
 
-// ---------------------------------------------------------------------------
-// SQS config
-// ---------------------------------------------------------------------------
-export interface SqsConfig {
-  region: string;
-  queueUrl: string;
-  pollWaitSeconds: number;
-  visibilityTimeout: number;
-  /** Only set in local dev to point at LocalStack. */
-  endpoint?: string;
-}
-
 export function getSqsConfig(): SqsConfig {
-  // Support both variable naming conventions:
-  // - SQS_SCAN_QUEUE_URL (preferred)
-  // - SQS_QUEUE_URL (ECS task definition)
   const queueUrl = process.env.SQS_SCAN_QUEUE_URL ?? process.env.SQS_QUEUE_URL ?? '';
   
-  console.log('[SQSConfig] Resolved configuration:', {
+  logInfo(context, 'SQSConfig resolved', {
     queueUrl: queueUrl || '(NOT SET)',
     region: getAwsRegion(),
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
@@ -233,31 +133,16 @@ export function getSqsConfig(): SqsConfig {
   return {
     region: getAwsRegion(),
     queueUrl,
-    pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
-    visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? 300),
+    pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? WORKER_CONSTANTS.SQS_WAIT_TIME_SECONDS),
+    visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? WORKER_CONSTANTS.SQS_EXTENDED_VISIBILITY_TIMEOUT_SECONDS),
     endpoint: process.env.AWS_ENDPOINT,
   };
 }
 
-// ---------------------------------------------------------------------------
-// ClamAV config
-//
-// In production (ECS): clamd runs as a sidecar container in the same task.
-// It binds on localhost:3310 (TCP).  CLAMAV_HOST defaults to localhost and
-// CLAMAV_PORT to 3310 — so no env var changes are needed in production.
-//
-// SIMULATE_SCAN=true bypasses all ClamAV calls (local dev / CI without clamd).
-// ---------------------------------------------------------------------------
-export interface ClamavConfig {
-  host: string;
-  port: number;
-  simulateScan: boolean;
-}
-
 export function getClamavConfig(): ClamavConfig {
   return {
-    host: process.env.CLAMAV_HOST ?? 'localhost',
-    port: Number(process.env.CLAMAV_PORT ?? 3310),
+    host: process.env.CLAMAV_HOST ?? AWS_CONSTANTS.CLAMAV_DEFAULT_HOST,
+    port: Number(process.env.CLAMAV_PORT ?? AWS_CONSTANTS.CLAMAV_DEFAULT_PORT),
     simulateScan: process.env.SIMULATE_SCAN === 'true',
   };
 }

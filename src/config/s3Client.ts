@@ -1,25 +1,15 @@
-/**
- * S3 Client Utilities
- * 
- * Provides S3 connectivity checking and configuration validation
- */
-
 import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { logInfo, logError, logWarn } from '../../utils/logger.js';
-import { getS3Config } from '../../config/config.js';
+import { logInfo, logError, logWarn, logDebug } from '../utils/logger.js';
+import { getS3Config } from './config.js';
+import { AWS_CONSTANTS } from '../constants/aws.constants.js';
 
 const context = 'S3Client';
 
-/**
- * Check S3 connectivity and validate bucket access
- * Verifies that all required S3 buckets are accessible
- */
 export async function checkS3Connectivity(): Promise<void> {
   const s3Config = getS3Config();
   
   logInfo(context, 'Checking S3 connectivity for all buckets...');
   
-  // Validate that all required buckets are configured
   const missingBuckets: string[] = [];
   if (!s3Config.uploadsBucket) missingBuckets.push('S3_UPLOADS_BUCKET or UPLOAD_BUCKET');
   if (!s3Config.cleanBucket) missingBuckets.push('S3_CLEAN_BUCKET or CLEAN_BUCKET');
@@ -68,9 +58,6 @@ export async function checkS3Connectivity(): Promise<void> {
   logInfo(context, 'All S3 buckets are accessible and connectivity verified successfully');
 }
 
-/**
- * Get configured S3 client instance
- */
 export function getS3Client(): S3Client {
   const region = process.env.AWS_REGION || 'eu-west-2';
   return new S3Client({ region });
