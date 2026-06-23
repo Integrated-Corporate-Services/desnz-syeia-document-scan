@@ -6,7 +6,7 @@
  * services that use this naming convention.
  */
 
-import { getPool, query } from './connection.js';
+import { getPool, query, testConnection } from './connection.js';
 import { logInfo, logError } from '../../utils/logger.js';
 
 const context = 'DatabasePool';
@@ -14,17 +14,29 @@ const context = 'DatabasePool';
 /**
  * Initialize the database connection pool
  * This is an alias to getPool() that triggers pool initialization
+ * and runs a connectivity test
  */
 export async function initPool(): Promise<void> {
   try {
     logInfo(context, 'Initializing database pool...');
     const pool = getPool();
     
-    // Test the connection
-    await pool.query('SELECT NOW()');
-    logInfo(context, 'Database pool initialized and connection verified');
+    logInfo(context, 'Database pool created successfully');
+    
+    // Test the connection with enhanced logging
+    await testConnection();
+    
+    logInfo(context, 'Database pool initialized and connection verified successfully');
   } catch (error) {
-    logError(context, 'Failed to initialize database pool', error);
+    logError(context, 'CRITICAL: Failed to initialize database pool', error);
+    logError(context, 'Please check:', {
+      message: 'Ensure DB_HOST, DB_PORT, DB_NAME, and DB_CREDENTIALS are set correctly',
+      rdsEndpoint: process.env.DB_HOST || process.env.PGHOST || '(NOT SET)',
+      databaseName: process.env.DB_NAME || process.env.PGDATABASE || '(NOT SET)',
+      hasCredentials: !!process.env.DB_CREDENTIALS,
+      hasIndividualCreds: !!(process.env.DB_USER && process.env.DB_PASSWORD),
+      sslMode: process.env.DB_SSLMODE || process.env.PGSSLMODE || 'require',
+    });
     throw error;
   }
 }

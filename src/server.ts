@@ -33,7 +33,54 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3004;
 const HOST = '0.0.0.0';
 
 (async () => {
+  // ── 0: Environment Variables Logging ─────────────────────────────────────
+  logger.info('='.repeat(80));
+  logger.info('DOCUMENT SCAN SERVICE - STARTUP CONFIGURATION');
+  logger.info('='.repeat(80));
+  
+  logger.info('Environment Variables Loaded:', {
+    NODE_ENV: process.env.NODE_ENV || '(not set)',
+    AWS_REGION: process.env.AWS_REGION || process.env.AWS_Region || '(not set)',
+    PORT: PORT,
+    LOG_LEVEL: process.env.LOG_LEVEL || '(not set)',
+  });
+  
+  logger.info('Database Configuration:', {
+    DB_HOST: process.env.DB_HOST || '(not set)',
+    DB_PORT: process.env.DB_PORT || '(not set)',
+    DB_NAME: process.env.DB_NAME || '(not set)',
+    DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : '(not set)',
+    DB_SSLMODE: process.env.DB_SSLMODE || '(not set)',
+    DB_POOL_SIZE: process.env.DB_POOL_SIZE || '(not set)',
+    PGHOST: process.env.PGHOST || '(not set - fallback)',
+    PGPORT: process.env.PGPORT || '(not set - fallback)',
+    PGDATABASE: process.env.PGDATABASE || '(not set - fallback)',
+  });
+  
+  logger.info('S3 Configuration:', {
+    S3_UPLOADS_BUCKET: process.env.S3_UPLOADS_BUCKET || '(not set)',
+    UPLOAD_BUCKET: process.env.UPLOAD_BUCKET || '(not set)',
+    S3_CLEAN_BUCKET: process.env.S3_CLEAN_BUCKET || '(not set)',
+    CLEAN_BUCKET: process.env.CLEAN_BUCKET || '(not set)',
+    S3_QUARANTINE_BUCKET: process.env.S3_QUARANTINE_BUCKET || '(not set)',
+    QUARANTINE_BUCKET: process.env.QUARANTINE_BUCKET || '(not set)',
+  });
+  
+  logger.info('SQS Configuration:', {
+    SQS_SCAN_QUEUE_URL: process.env.SQS_SCAN_QUEUE_URL || '(not set)',
+    SQS_QUEUE_URL: process.env.SQS_QUEUE_URL || '(not set)',
+  });
+  
+  logger.info('ClamAV Configuration:', {
+    CLAMAV_HOST: process.env.CLAMAV_HOST || 'localhost (default)',
+    CLAMAV_PORT: process.env.CLAMAV_PORT || '3310 (default)',
+    SIMULATE_SCAN: process.env.SIMULATE_SCAN || 'false (default)',
+  });
+  
+  logger.info('='.repeat(80));
+  
   // ── 1 + 2: HTTP server (liveness available immediately) ─────────────────
+  logger.info('Starting HTTP server...');
   const wrapper = express();
 
   wrapper.get('/health', (_req, res) => {
@@ -48,8 +95,8 @@ const HOST = '0.0.0.0';
   await new Promise<void>((resolve) => {
     server.listen(PORT, HOST, () => {
       logger.info(`Document Scan service listening on http://${HOST}:${PORT}`);
-      logger.info(`Health: http://${HOST}:${PORT}/health`);
-      logger.info(`Ready:  http://${HOST}:${PORT}/ready`);
+      logger.info(`   Health endpoint: http://${HOST}:${PORT}/health`);
+      logger.info(`   Ready endpoint:  http://${HOST}:${PORT}/ready`);
       resolve();
     });
   });
@@ -63,15 +110,18 @@ const HOST = '0.0.0.0';
   await checkS3Connectivity();
 
   // ── 5: SQS config validation ─────────────────────────────────────────────
+  logger.info('Validating SQS configuration…');
   const sqsCfg = getSqsConfig();
   if (!sqsCfg.queueUrl) {
-    throw new Error('SQS_SCAN_QUEUE_URL environment variable is required.');
+    throw new Error('SQS queue URL is required but not configured. Check SQS_SCAN_QUEUE_URL or SQS_QUEUE_URL environment variable.');
   }
-  logger.info('SQS configuration valid ✓', { queueUrl: sqsCfg.queueUrl });
+  logger.info('SQS configuration valid', { queueUrl: sqsCfg.queueUrl });
 
   // ── 6: Mark ready ─────────────────────────────────────────────────────────
   setReady(true);
-  logger.info('All startup checks passed — service is READY ✓');
+  logger.info('='.repeat(80));
+  logger.info('ALL STARTUP CHECKS PASSED - SERVICE IS READY');
+  logger.info('='.repeat(80));
 
   // ── 7: Start SQS worker poll loop ─────────────────────────────────────────
   logger.info('Starting SQS poll loop…');

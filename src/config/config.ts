@@ -180,11 +180,26 @@ export interface S3Config {
 }
 
 export function getS3Config(): S3Config {
+  // Support both variable naming conventions:
+  // - S3_UPLOADS_BUCKET / S3_CLEAN_BUCKET / S3_QUARANTINE_BUCKET (preferred)
+  // - UPLOAD_BUCKET / CLEAN_BUCKET / QUARANTINE_BUCKET (ECS task definition)
+  const uploadsBucket = process.env.S3_UPLOADS_BUCKET ?? process.env.UPLOAD_BUCKET ?? '';
+  const cleanBucket = process.env.S3_CLEAN_BUCKET ?? process.env.CLEAN_BUCKET ?? '';
+  const quarantineBucket = process.env.S3_QUARANTINE_BUCKET ?? process.env.QUARANTINE_BUCKET ?? '';
+  
+  console.log('[S3Config] Resolved configuration:', {
+    uploadsBucket: uploadsBucket || '(NOT SET)',
+    cleanBucket: cleanBucket || '(NOT SET)',
+    quarantineBucket: quarantineBucket || '(NOT SET)',
+    region: getAwsRegion(),
+    hasCustomEndpoint: !!(process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT),
+  });
+  
   return {
     region: getAwsRegion(),
-    uploadsBucket: process.env.S3_UPLOADS_BUCKET ?? '',
-    cleanBucket: process.env.S3_CLEAN_BUCKET ?? '',
-    quarantineBucket: process.env.S3_QUARANTINE_BUCKET ?? '',
+    uploadsBucket,
+    cleanBucket,
+    quarantineBucket,
     endpoint: process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT,
   };
 }
@@ -202,9 +217,22 @@ export interface SqsConfig {
 }
 
 export function getSqsConfig(): SqsConfig {
+  // Support both variable naming conventions:
+  // - SQS_SCAN_QUEUE_URL (preferred)
+  // - SQS_QUEUE_URL (ECS task definition)
+  const queueUrl = process.env.SQS_SCAN_QUEUE_URL ?? process.env.SQS_QUEUE_URL ?? '';
+  
+  console.log('[SQSConfig] Resolved configuration:', {
+    queueUrl: queueUrl || '(NOT SET)',
+    region: getAwsRegion(),
+    pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
+    visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? 300),
+    hasCustomEndpoint: !!process.env.AWS_ENDPOINT,
+  });
+  
   return {
     region: getAwsRegion(),
-    queueUrl: process.env.SQS_SCAN_QUEUE_URL ?? '',
+    queueUrl,
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
     visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? 300),
     endpoint: process.env.AWS_ENDPOINT,
