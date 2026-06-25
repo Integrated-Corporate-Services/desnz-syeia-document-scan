@@ -18,9 +18,22 @@ export async function getConfigValue(
   region: string = getAwsRegion()
 ): Promise<string> {
   if (!param) return '';
-  if (param.startsWith('arn:aws:ssm:')) {
+  
+  if (param.startsWith('arn:aws:ssm:') || param.startsWith('/')) {
     const ssm = new SSMClient({ region });
-    const command = new GetParameterCommand({ Name: param, WithDecryption: true });
+    
+    let parameterName = param;
+    if (param.startsWith('arn:aws:ssm:')) {
+      const arnParts = param.split(':parameter');
+      parameterName = arnParts.length > 1 ? arnParts[1] : param;
+    }
+    
+    logInfo(context, 'Fetching SSM parameter', { parameterName, withDecryption: true });
+    
+    const command = new GetParameterCommand({ 
+      Name: parameterName, 
+      WithDecryption: true 
+    });
     const response = await ssm.send(command);
     return response.Parameter?.Value ?? '';
   }
@@ -77,24 +90,61 @@ function _needRefreshSecret(): boolean {
 
 export async function getDbSecretConfig(): Promise<DbCredentials> {
   const raw = process.env.DB_CREDENTIALS;
-  if (!raw) throw new Error('Missing env var DB_CREDENTIALS (Secrets Manager secret JSON).');
+  if (!raw) throw new Error('Missing env var DB_CREDENTIALS (SSM Parameter or Secrets Manager ARN or JSON).');
 
-  if (!raw.startsWith('arn:aws:secretsmanager:')) {
-    try {
-      const parsed = JSON.parse(raw) as DbCredentials;
-      if (parsed.username && parsed.password) return parsed;
-    } catch {
+  if (raw.startsWith('arn:aws:ssm:') || raw.startsWith('/')) {
+    logInfo(context, 'Fetching DB credentials from SSM Parameter Store', { parameter: raw });
+    
+    if (!_needRefreshSecret() && _cachedDbSecret) return _cachedDbSecret.value;
+    
+    const ssmValue = await getConfigValue(raw);
+    
+    // SSM parameter can contain either direct JSON or a Secrets Manager ARN
+    if (ssmValue.startsWith('arn:aws:secretsmanager:')) {
+      logInfo(context, 'SSM parameter contains Secrets Manager ARN, fetching secret');
+      const parsed = (await getSecretConfig(ssmValue)) as unknown as DbCredentials;
+      if (!parsed.username || !parsed.password) {
+        throw new Error("DB secret JSON must contain 'username' and 'password'.");
+      }
+      _cachedDbSecret = { value: parsed, fetchedAt: Date.now() };
+      return parsed;
+    } else {
+      // SSM parameter contains direct JSON credentials
+      try {
+        const parsed = JSON.parse(ssmValue) as DbCredentials;
+        if (parsed.username && parsed.password) {
+          _cachedDbSecret = { value: parsed, fetchedAt: Date.now() };
+          return parsed;
+        }
+        throw new Error("DB credentials JSON must contain 'username' and 'password'.");
+      } catch (error) {
+        throw new Error(`Failed to parse SSM parameter value as JSON: ${(error as Error).message}`);
+      }
     }
   }
 
-  if (!_needRefreshSecret() && _cachedDbSecret) return _cachedDbSecret.value;
-
-  const parsed = (await getSecretConfig(raw)) as unknown as DbCredentials;
-  if (!parsed.username || !parsed.password) {
-    throw new Error("DB secret JSON must contain 'username' and 'password'.");
+  if (raw.startsWith('arn:aws:secretsmanager:')) {
+    logInfo(context, 'Fetching DB credentials from Secrets Manager', { secretArn: raw });
+    
+    if (!_needRefreshSecret() && _cachedDbSecret) return _cachedDbSecret.value;
+    
+    const parsed = (await getSecretConfig(raw)) as unknown as DbCredentials;
+    if (!parsed.username || !parsed.password) {
+      throw new Error("DB secret JSON must contain 'username' and 'password'.");
+    }
+    _cachedDbSecret = { value: parsed, fetchedAt: Date.now() };
+    return parsed;
   }
-  _cachedDbSecret = { value: parsed, fetchedAt: Date.now() };
-  return parsed;
+
+  // Try direct JSON as fallback
+  try {
+    logInfo(context, 'Parsing DB credentials as direct JSON');
+    const parsed = JSON.parse(raw) as DbCredentials;
+    if (parsed.username && parsed.password) return parsed;
+    throw new Error("DB credentials JSON must contain 'username' and 'password'.");
+  } catch (error) {
+    throw new Error(`DB_CREDENTIALS must be SSM parameter ARN, Secrets Manager ARN, or valid JSON. Error: ${(error as Error).message}`);
+  }
 }
 
 export function getS3Config(): S3Config {
