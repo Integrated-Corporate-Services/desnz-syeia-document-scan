@@ -8,9 +8,22 @@ on:
       - uat
 
 jobs:
-  # Dependency review requires GitHub Advanced Security + dependency graph.
-  # Re-enable this job once enabled for the org/repo:
-  # https://github.com/Integrated-Corporate-Services/desnz-syeia-document-scan/settings/security_analysis
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Won't block PR if it fails due to missing permissions
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: always
 
   build:
     name: Build Document Scan
