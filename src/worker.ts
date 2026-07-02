@@ -15,6 +15,24 @@ const context = 'SQSWorker';
 let isRunning = false;
 let sqsClient: SQSClient;
 let processFileScanWorkflow: ProcessFileScanWorkflow;
+let uploadedFileRepository: UploadedFileRepository;
+
+type ParsedScanRequest = ProcessFileScanRequest & { source: 'direct' | 's3Event' };
+
+interface S3EventMessage {
+  Records?: Array<{
+    eventSource?: string;
+    eventName?: string;
+    s3?: {
+      object?: {
+        key?: string;
+      };
+    };
+    responseElements?: {
+      'x-amz-request-id'?: string;
+    };
+  }>;
+}
 
 function initializeWorker() {
   logInfo(context, '[worker.ts][initializeWorker] STARTS');
@@ -23,18 +41,58 @@ function initializeWorker() {
   sqsClient = new SQSClient({ region });
 
   const fileScanEventRepo = new FileScanEventRepository();
-  const uploadedFileRepo = new UploadedFileRepository();
+  uploadedFileRepository = new UploadedFileRepository();
   const s3Service = new S3Service();
   const clamAVService = new ClamAVService();
 
   processFileScanWorkflow = new ProcessFileScanWorkflow(
-    uploadedFileRepo,
+    uploadedFileRepository,
     fileScanEventRepo,
     s3Service,
     clamAVService
   );
   
   logInfo(context, '[worker.ts][initializeWorker] ENDS');
+}
+
+async function parseScanRequest(body: string, messageId?: string): Promise<ParsedScanRequest> {
+  const payload = JSON.parse(body) as ProcessFileScanRequest | S3EventMessage;
+
+  // Preferred format from backend.
+  if ((payload as ProcessFileScanRequest).eventId && (payload as ProcessFileScanRequest).fileId) {
+    const direct = payload as ProcessFileScanRequest;
+    return { ...direct, source: 'direct' };
+  }
+
+  // Fallback format from S3 notifications.
+  const s3Event = payload as S3EventMessage;
+  const record = s3Event.Records?.[0];
+  if (!record?.s3?.object?.key) {
+    throw new Error('Unsupported message format: missing eventId/fileId and missing S3 object key');
+  }
+
+  const decodedKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+  const file = await uploadedFileRepository.findByS3Key(decodedKey);
+  if (!file?.id) {
+    throw new Error(`No uploaded file record found for S3 key: ${decodedKey}`);
+  }
+
+  const fallbackEventId =
+    record.responseElements?.['x-amz-request-id'] || `${messageId || 's3'}-${file.id}`;
+
+  logInfo(context, '[worker.ts][parseScanRequest] Resolved S3 event message', {
+    messageId,
+    eventName: record.eventName,
+    s3Key: decodedKey,
+    fileId: file.id,
+    eventId: fallbackEventId,
+  });
+
+  return {
+    eventId: fallbackEventId,
+    fileId: file.id,
+    source: 's3Event',
+  };
 }
 
 export function startWorker(): void {
@@ -130,14 +188,7 @@ async function processMessage(message: Message, queueUrl: string): Promise<void>
 
     logInfo(context, '[worker.ts][processMessage] Processing SQS message', { messageId: MessageId });
 
-    const scanRequest: ProcessFileScanRequest = JSON.parse(Body);
-
-    if (!scanRequest.eventId) {
-      throw new Error('Missing eventId in scan request');
-    }
-    if (!scanRequest.fileId) {
-      throw new Error('Missing fileId in scan request');
-    }
+    const scanRequest = await parseScanRequest(Body, MessageId);
 
     await processFileScanWorkflow.execute({
       eventId: scanRequest.eventId,
@@ -147,7 +198,8 @@ async function processMessage(message: Message, queueUrl: string): Promise<void>
     logInfo(context, '[worker.ts][processMessage] Successfully processed scan request', {
       messageId: MessageId,
       eventId: scanRequest.eventId,
-      fileId: scanRequest.fileId
+      fileId: scanRequest.fileId,
+      source: scanRequest.source,
     });
 
     if (ReceiptHandle) {
