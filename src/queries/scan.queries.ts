@@ -37,8 +37,7 @@ export const UPLOADED_FILE_QUERIES = {
     SET scan_status = $2,
         scan_result = $3,
         virus_name = $4,
-        scanned_at = $5,
-        bucket_name = COALESCE($6, bucket_name)
+        scanned_at = $5
     WHERE id = $1
   `,
 } as const;
