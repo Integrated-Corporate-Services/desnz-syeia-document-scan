@@ -41,46 +41,38 @@ export class FileScanEventRepository implements IFileScanEventRepository {
   }
 
   async recordEvent(
-    eventId: string,
     fileId: string,
     s3Key: string,
-    status: string
-  ): Promise<boolean> {
+    status: string,
+    eventId?: string
+  ): Promise<{ eventId: string } | null> {
     logInfo(this.context, '[FileScanEventRepository.ts][recordEvent] STARTS', {
       eventId,
       fileId,
       s3Key,
       status,
     });
-    logInfo(this.context, '[FileScanEventRepository.ts][recordEvent] Recording scan event', {
-      eventId,
-      fileId,
-      s3Key,
-      status,
-    });
-    
+
     try {
       const result: QueryResult<{ event_id: string }> = await query(
         FILE_SCAN_QUERIES.RECORD_EVENT,
-        [eventId, fileId, s3Key, status]
+        [eventId ?? null, fileId, s3Key, status]
       );
-      
-      const recorded = result.rows.length > 0;
-      
-      if (recorded) {
-        logInfo(this.context, '[FileScanEventRepository.ts][recordEvent] Scan event recorded successfully', {
-          eventId,
-          fileId,
-        });
-      } else {
+
+      const row = result.rows[0];
+      if (!row) {
         logDebug(this.context, '[FileScanEventRepository.ts][recordEvent] Scan event not recorded (duplicate)', {
           eventId,
           fileId,
         });
+        return null;
       }
-      
-      logInfo(this.context, '[FileScanEventRepository.ts][recordEvent] ENDS');
-      return recorded;
+
+      logInfo(this.context, '[FileScanEventRepository.ts][recordEvent] Scan event recorded successfully', {
+        eventId: row.event_id,
+        fileId,
+      });
+      return { eventId: row.event_id };
     } catch (error) {
       logError(this.context, '[FileScanEventRepository.ts][recordEvent] Failed to record scan event', error as Error, {
         eventId,
@@ -88,7 +80,6 @@ export class FileScanEventRepository implements IFileScanEventRepository {
         s3Key,
         status,
       });
-      logError(this.context, '[FileScanEventRepository.ts][recordEvent] ENDS with error');
       throw error;
     }
   }

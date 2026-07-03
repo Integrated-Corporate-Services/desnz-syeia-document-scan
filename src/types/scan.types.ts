@@ -4,8 +4,9 @@ export interface ScanResultResponse {
 }
 
 export interface ProcessFileScanRequest {
-  eventId: string;
   fileId: string;
+  /** Provided by backend SQS messages; omitted for S3 events (DB generates event_id). */
+  eventId?: string;
 }
 
 export interface IClamAVClient {
@@ -32,9 +33,9 @@ export interface IUploadedFileRepository {
 export interface IFileScanEventRepository {
   findByEventId(eventId: string): Promise<any>;
   recordEvent(
-    eventId: string,
     fileId: string,
     s3Key: string,
-    status: string
-  ): Promise<boolean>;
+    status: string,
+    eventId?: string
+  ): Promise<{ eventId: string } | null>;
 }

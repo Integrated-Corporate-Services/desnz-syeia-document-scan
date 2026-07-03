@@ -12,24 +12,25 @@ export class ProcessFileScanWorkflow {
   ) {}
 
   async execute(request: ProcessFileScanRequest): Promise<void> {
-    const { eventId, fileId } = request;
+    const { fileId } = request;
+    let { eventId } = request;
 
     logInfo('ProcessFileScanWorkflow', 'Starting file scan workflow', { eventId, fileId });
 
-    // Check if event already processed
-    logDebug('ProcessFileScanWorkflow', 'Checking for existing event', { eventId });
-    const existingEvent = await this.fileScanEventRepo.findByEventId(eventId);
-    if (existingEvent) {
-      logError('ProcessFileScanWorkflow', 'Event already processed', undefined, { eventId });
-      throw new ScanAlreadyProcessedError(eventId);
-    }
-
-    // Fetch file record from database
     logDebug('ProcessFileScanWorkflow', 'Fetching file from database', { fileId });
     const file = await this.uploadedFileRepo.findById(fileId);
     if (!file) {
       logError('ProcessFileScanWorkflow', 'File not found in database', undefined, { fileId });
       throw new FileNotFoundError(fileId);
+    }
+
+    if (file.scan_status === SCAN_STATUS.COMPLETED) {
+      logInfo('ProcessFileScanWorkflow', 'File already scanned, skipping', {
+        fileId,
+        scanStatus: file.scan_status,
+        scanResult: file.scan_result,
+      });
+      return;
     }
 
     logInfo('ProcessFileScanWorkflow', 'File record retrieved', {
@@ -49,28 +50,36 @@ export class ProcessFileScanWorkflow {
       throw new Error(`File ${fileId} missing S3 information`);
     }
 
-    // Record the scan event
+    if (eventId) {
+      logDebug('ProcessFileScanWorkflow', 'Checking for existing event', { eventId });
+      const existingEvent = await this.fileScanEventRepo.findByEventId(eventId);
+      if (existingEvent) {
+        logError('ProcessFileScanWorkflow', 'Event already processed', undefined, { eventId });
+        throw new ScanAlreadyProcessedError(eventId);
+      }
+    }
+
     logDebug('ProcessFileScanWorkflow', 'Recording scan event', {
       eventId,
       fileId,
       s3Key: file.s3_key,
     });
-    const isRecorded = await this.fileScanEventRepo.recordEvent(
-      eventId,
+    const recorded = await this.fileScanEventRepo.recordEvent(
       fileId,
       file.s3_key,
-      EVENT_STATUS.PROCESSING
+      EVENT_STATUS.PROCESSING,
+      eventId
     );
 
-    if (!isRecorded) {
+    if (!recorded) {
       logError('ProcessFileScanWorkflow', 'Failed to record event (duplicate detected)', undefined, { eventId });
-      throw new ScanAlreadyProcessedError(eventId);
+      throw new ScanAlreadyProcessedError(eventId ?? fileId);
     }
 
+    eventId = recorded.eventId;
     logInfo('ProcessFileScanWorkflow', 'Scan event recorded, starting scan', { eventId, fileId });
 
     try {
-      // Get file from S3
       logDebug('ProcessFileScanWorkflow', 'Retrieving file stream from S3', {
         bucketName: file.bucket_name,
         s3Key: file.s3_key,
@@ -78,7 +87,6 @@ export class ProcessFileScanWorkflow {
       const fileStream = await this.s3Service.getFileStream(file.bucket_name, file.s3_key);
       logInfo('ProcessFileScanWorkflow', 'File stream retrieved successfully', { fileId });
 
-      // Scan the file
       logInfo('ProcessFileScanWorkflow', 'Starting virus scan', { fileId, filename: file.filename });
       const scanResult = await this.clamAVClient.scanStream(fileStream);
       logInfo('ProcessFileScanWorkflow', 'Virus scan completed', {
@@ -87,11 +95,9 @@ export class ProcessFileScanWorkflow {
         virusName: scanResult.virusName,
       });
 
-      // Determine destination folder
       const destinationFolder = scanResult.isClean ? S3_FOLDERS.CLEAN : S3_FOLDERS.INFECTED;
       const destinationKey = `${destinationFolder}/${file.s3_key}`;
 
-      // Move file to appropriate folder
       logDebug('ProcessFileScanWorkflow', 'Moving file to destination folder', {
         fileId,
         sourceBucket: file.bucket_name,
@@ -102,7 +108,6 @@ export class ProcessFileScanWorkflow {
       await this.s3Service.moveFile(file.bucket_name, file.s3_key, destinationKey);
       logInfo('ProcessFileScanWorkflow', 'File moved successfully', { fileId, destinationKey });
 
-      // Update database with scan results
       logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
         fileId,
         scanStatus: SCAN_STATUS.COMPLETED,
@@ -130,7 +135,6 @@ export class ProcessFileScanWorkflow {
         eventId,
       });
 
-      // Update database with failure status
       logDebug('ProcessFileScanWorkflow', 'Updating database with failure status', { fileId });
       await this.uploadedFileRepo.updateScanStatus(
         fileId,

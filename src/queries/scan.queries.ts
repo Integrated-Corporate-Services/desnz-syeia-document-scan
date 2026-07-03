@@ -7,7 +7,7 @@ export const FILE_SCAN_QUERIES = {
   
   RECORD_EVENT: `
     INSERT INTO public.file_scan_events (event_id, file_id, s3_key, status, created_at)
-    VALUES ($1, $2, $3, $4, NOW())
+    VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, NOW())
     ON CONFLICT (event_id) DO NOTHING
     RETURNING event_id
   `,
