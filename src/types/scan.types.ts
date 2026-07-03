@@ -15,7 +15,12 @@ export interface IClamAVClient {
 
 export interface IS3Service {
   getFileStream(bucket: string, key: string): Promise<any>;
-  moveFile(sourceBucket: string, sourceKey: string, destinationKey: string): Promise<void>;
+  moveFile(
+    sourceBucket: string,
+    sourceKey: string,
+    destinationBucket: string,
+    destinationKey: string
+  ): Promise<void>;
 }
 
 export interface IUploadedFileRepository {
@@ -26,7 +31,8 @@ export interface IUploadedFileRepository {
     scanStatus: string,
     scanResult: string | null,
     virusName: string | null,
-    scannedAt: Date
+    scannedAt: Date,
+    bucketName?: string | null
   ): Promise<void>;
 }
 

@@ -1,6 +1,7 @@
 import type { IUploadedFileRepository, IFileScanEventRepository, IS3Service, IClamAVClient, ProcessFileScanRequest } from '../types/scan.types.js';
-import { SCAN_STATUS, SCAN_RESULT, S3_FOLDERS, EVENT_STATUS } from '../constants/scan.constants.js';
+import { SCAN_STATUS, SCAN_RESULT, EVENT_STATUS } from '../constants/scan.constants.js';
 import { FileNotFoundError, ScanAlreadyProcessedError } from '../errors/business.errors.js';
+import { getS3Config } from '../config/config.js';
 import { logInfo, logError, logDebug } from '../utils/logger.js';
 
 export class ProcessFileScanWorkflow {
@@ -95,18 +96,33 @@ export class ProcessFileScanWorkflow {
         virusName: scanResult.virusName,
       });
 
-      const destinationFolder = scanResult.isClean ? S3_FOLDERS.CLEAN : S3_FOLDERS.INFECTED;
-      const destinationKey = `${destinationFolder}/${file.s3_key}`;
+      const { cleanBucket, quarantineBucket } = getS3Config();
+      if (!cleanBucket || !quarantineBucket) {
+        throw new Error('S3 clean/quarantine bucket configuration is missing');
+      }
 
-      logDebug('ProcessFileScanWorkflow', 'Moving file to destination folder', {
+      const destinationBucket = scanResult.isClean ? cleanBucket : quarantineBucket;
+      const destinationKey = file.s3_key;
+
+      logDebug('ProcessFileScanWorkflow', 'Moving file to destination bucket', {
         fileId,
         sourceBucket: file.bucket_name,
         sourceKey: file.s3_key,
+        destinationBucket,
         destinationKey,
         scanResult: scanResult.isClean ? 'CLEAN' : 'INFECTED',
       });
-      await this.s3Service.moveFile(file.bucket_name, file.s3_key, destinationKey);
-      logInfo('ProcessFileScanWorkflow', 'File moved successfully', { fileId, destinationKey });
+      await this.s3Service.moveFile(
+        file.bucket_name,
+        file.s3_key,
+        destinationBucket,
+        destinationKey
+      );
+      logInfo('ProcessFileScanWorkflow', 'File moved successfully', {
+        fileId,
+        destinationBucket,
+        destinationKey,
+      });
 
       logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
         fileId,
@@ -119,7 +135,8 @@ export class ProcessFileScanWorkflow {
         SCAN_STATUS.COMPLETED,
         scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED,
         scanResult.virusName,
-        new Date()
+        new Date(),
+        destinationBucket
       );
 
       logInfo('ProcessFileScanWorkflow', 'File scan workflow completed successfully', {

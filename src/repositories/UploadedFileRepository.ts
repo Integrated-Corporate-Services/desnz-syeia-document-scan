@@ -81,13 +81,15 @@ export class UploadedFileRepository implements IUploadedFileRepository {
     scanStatus: string,
     scanResult: string | null,
     virusName: string | null,
-    scannedAt: Date
+    scannedAt: Date,
+    bucketName?: string | null
   ): Promise<void> {
     logDebug(this.context, '[UploadedFileRepository.ts][updateScanStatus] STARTS', {
       fileId,
       scanStatus,
       scanResult,
       virusName,
+      bucketName,
     });
     logDebug(this.context, '[UploadedFileRepository.ts][updateScanStatus] Updating scan status in database', {
       fileId,
@@ -99,7 +101,7 @@ export class UploadedFileRepository implements IUploadedFileRepository {
     try {
       await query(
         UPLOADED_FILE_QUERIES.UPDATE_SCAN_STATUS,
-        [fileId, scanStatus, scanResult, virusName, scannedAt]
+        [fileId, scanStatus, scanResult, virusName, scannedAt, bucketName ?? null]
       );
       
       logDebug(this.context, '[UploadedFileRepository.ts][updateScanStatus] Scan status updated successfully', { fileId, scanStatus });

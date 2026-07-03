@@ -86,15 +86,22 @@ export class S3Service implements IS3Service {
     }
   }
 
-  async moveFile(sourceBucket: string, sourceKey: string, destinationKey: string): Promise<void> {
+  async moveFile(
+    sourceBucket: string,
+    sourceKey: string,
+    destinationBucket: string,
+    destinationKey: string
+  ): Promise<void> {
     logInfo(this.context, '[S3Service.ts][moveFile] STARTS', {
       sourceBucket,
       sourceKey,
+      destinationBucket,
       destinationKey,
     });
     logInfo(this.context, '[S3Service.ts][moveFile] Moving file in S3', {
       sourceBucket,
       sourceKey,
+      destinationBucket,
       destinationKey,
     });
 
@@ -102,11 +109,12 @@ export class S3Service implements IS3Service {
       logDebug(this.context, '[S3Service.ts][moveFile] Copying file to destination', {
         sourceBucket,
         sourceKey,
+        destinationBucket,
         destinationKey,
       });
 
       const copyCommand = new CopyObjectCommand({
-        Bucket: sourceBucket,
+        Bucket: destinationBucket,
         CopySource: `${sourceBucket}/${sourceKey}`,
         Key: destinationKey,
       });
@@ -118,6 +126,7 @@ export class S3Service implements IS3Service {
       logInfo(this.context, '[S3Service.ts][moveFile] File copied successfully', {
         sourceBucket,
         sourceKey,
+        destinationBucket,
         destinationKey,
         duration: copyDuration,
       });
@@ -139,6 +148,7 @@ export class S3Service implements IS3Service {
       logInfo(this.context, '[S3Service.ts][moveFile] File moved successfully', {
         sourceBucket,
         sourceKey,
+        destinationBucket,
         destinationKey,
         totalDuration: copyDuration + deleteDuration,
       });
@@ -148,6 +158,7 @@ export class S3Service implements IS3Service {
       logError(this.context, '[S3Service.ts][moveFile] Failed to move file in S3', error as Error, {
         sourceBucket,
         sourceKey,
+        destinationBucket,
         destinationKey,
       });
       logError(this.context, '[S3Service.ts][moveFile] ENDS with error');
