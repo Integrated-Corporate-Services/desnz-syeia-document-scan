@@ -25,3 +25,11 @@ export class VirusScanError extends BusinessError {
     this.name = 'VirusScanError';
   }
 }
+
+/** Thrown when an S3 event arrives before upload confirm creates the DB row. */
+export class FileRecordNotReadyError extends BusinessError {
+  constructor(s3Key: string) {
+    super(`Uploaded file record not ready for S3 key: ${s3Key}`);
+    this.name = 'FileRecordNotReadyError';
+  }
+}

@@ -9,7 +9,7 @@ const isCloudEnv = [
   'development'
 ].includes(process.env.NODE_ENV || '');
 
-const logLevel = process.env.LOG_LEVEL || (isCloudEnv ? 'info' : 'debug');
+const logLevel = (process.env.LOG_LEVEL || (isCloudEnv ? 'info' : 'debug')).toLowerCase();
 
 export const logger = createLogger({
   level: logLevel,
