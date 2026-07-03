@@ -40,6 +40,42 @@ export class UploadedFileRepository implements IUploadedFileRepository {
     }
   }
 
+  async findByS3Key(s3Key: string): Promise<UploadedFile | null> {
+    logDebug(this.context, '[UploadedFileRepository.ts][findByS3Key] STARTS', { s3Key });
+
+    try {
+      const result: QueryResult<UploadedFile> = await query(
+        UPLOADED_FILE_QUERIES.FIND_BY_S3_KEY,
+        [s3Key]
+      );
+
+      const file = result.rows[0] || null;
+      if (file) {
+        logDebug(this.context, '[UploadedFileRepository.ts][findByS3Key] File found in database', {
+          fileId: file.id,
+          s3Key: file.s3_key,
+        });
+      } else {
+        logDebug(this.context, '[UploadedFileRepository.ts][findByS3Key] File not found in database', { s3Key });
+      }
+
+      return file;
+    } catch (error) {
+      logError(this.context, '[UploadedFileRepository.ts][findByS3Key] Database query failed', error as Error, { s3Key });
+      throw error;
+    }
+  }
+
+  async findByS3KeyVariants(keyVariants: string[]): Promise<UploadedFile | null> {
+    for (const s3Key of keyVariants) {
+      const file = await this.findByS3Key(s3Key);
+      if (file) {
+        return file;
+      }
+    }
+    return null;
+  }
+
   async updateScanStatus(
     fileId: string,
     scanStatus: string,

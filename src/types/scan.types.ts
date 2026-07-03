@@ -19,6 +19,7 @@ export interface IS3Service {
 
 export interface IUploadedFileRepository {
   findById(fileId: string): Promise<any>;
+  findByS3Key(s3Key: string): Promise<any>;
   updateScanStatus(
     fileId: string,
     scanStatus: string,
