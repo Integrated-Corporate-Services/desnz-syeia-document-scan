@@ -104,7 +104,7 @@ export class ProcessFileScanWorkflow {
       const destinationBucket = scanResult.isClean ? cleanBucket : quarantineBucket;
       const destinationKey = file.s3_key;
 
-      logDebug('ProcessFileScanWorkflow', 'Moving file to destination bucket', {
+      logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket (upload bucket unchanged)', {
         fileId,
         sourceBucket: file.bucket_name,
         sourceKey: file.s3_key,
@@ -112,13 +112,13 @@ export class ProcessFileScanWorkflow {
         destinationKey,
         scanResult: scanResult.isClean ? 'CLEAN' : 'INFECTED',
       });
-      await this.s3Service.moveFile(
+      await this.s3Service.copyFile(
         file.bucket_name,
         file.s3_key,
         destinationBucket,
         destinationKey
       );
-      logInfo('ProcessFileScanWorkflow', 'File moved successfully', {
+      logInfo('ProcessFileScanWorkflow', 'File copied to segregation bucket', {
         fileId,
         destinationBucket,
         destinationKey,
@@ -135,8 +135,7 @@ export class ProcessFileScanWorkflow {
         SCAN_STATUS.COMPLETED,
         scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED,
         scanResult.virusName,
-        new Date(),
-        destinationBucket
+        new Date()
       );
 
       logInfo('ProcessFileScanWorkflow', 'File scan workflow completed successfully', {

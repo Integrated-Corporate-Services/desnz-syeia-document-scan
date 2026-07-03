@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { logDebug, logError, logInfo } from '../utils/logger.js';
 import type { IS3Service } from '../types/scan.types.js';
@@ -86,19 +86,13 @@ export class S3Service implements IS3Service {
     }
   }
 
-  async moveFile(
+  async copyFile(
     sourceBucket: string,
     sourceKey: string,
     destinationBucket: string,
     destinationKey: string
   ): Promise<void> {
-    logInfo(this.context, '[S3Service.ts][moveFile] STARTS', {
-      sourceBucket,
-      sourceKey,
-      destinationBucket,
-      destinationKey,
-    });
-    logInfo(this.context, '[S3Service.ts][moveFile] Moving file in S3', {
+    logInfo(this.context, '[S3Service.ts][copyFile] STARTS', {
       sourceBucket,
       sourceKey,
       destinationBucket,
@@ -106,62 +100,31 @@ export class S3Service implements IS3Service {
     });
 
     try {
-      logDebug(this.context, '[S3Service.ts][moveFile] Copying file to destination', {
-        sourceBucket,
-        sourceKey,
-        destinationBucket,
-        destinationKey,
-      });
-
       const copyCommand = new CopyObjectCommand({
         Bucket: destinationBucket,
         CopySource: `${sourceBucket}/${sourceKey}`,
         Key: destinationKey,
       });
 
-      const copyStartTime = Date.now();
+      const startTime = Date.now();
       await this.client.send(copyCommand);
-      const copyDuration = Date.now() - copyStartTime;
 
-      logInfo(this.context, '[S3Service.ts][moveFile] File copied successfully', {
+      logInfo(this.context, '[S3Service.ts][copyFile] File copied successfully', {
         sourceBucket,
         sourceKey,
         destinationBucket,
         destinationKey,
-        duration: copyDuration,
+        duration: Date.now() - startTime,
       });
-
-      logDebug(this.context, '[S3Service.ts][moveFile] Deleting source file', {
-        sourceBucket,
-        sourceKey,
-      });
-
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: sourceBucket,
-        Key: sourceKey,
-      });
-
-      const deleteStartTime = Date.now();
-      await this.client.send(deleteCommand);
-      const deleteDuration = Date.now() - deleteStartTime;
-
-      logInfo(this.context, '[S3Service.ts][moveFile] File moved successfully', {
-        sourceBucket,
-        sourceKey,
-        destinationBucket,
-        destinationKey,
-        totalDuration: copyDuration + deleteDuration,
-      });
-      
-      logInfo(this.context, '[S3Service.ts][moveFile] ENDS');
+      logInfo(this.context, '[S3Service.ts][copyFile] ENDS');
     } catch (error) {
-      logError(this.context, '[S3Service.ts][moveFile] Failed to move file in S3', error as Error, {
+      logError(this.context, '[S3Service.ts][copyFile] Failed to copy file in S3', error as Error, {
         sourceBucket,
         sourceKey,
         destinationBucket,
         destinationKey,
       });
-      logError(this.context, '[S3Service.ts][moveFile] ENDS with error');
+      logError(this.context, '[S3Service.ts][copyFile] ENDS with error');
       throw error;
     }
   }
