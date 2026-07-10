@@ -83,4 +83,18 @@ export class FileScanEventRepository implements IFileScanEventRepository {
       throw error;
     }
   }
+
+  async updateEventStatus(eventId: string, status: string): Promise<void> {
+    logDebug(this.context, '[FileScanEventRepository.ts][updateEventStatus] STARTS', { eventId, status });
+    try {
+      await query(FILE_SCAN_QUERIES.UPDATE_EVENT_STATUS, [eventId, status]);
+      logDebug(this.context, '[FileScanEventRepository.ts][updateEventStatus] ENDS', { eventId, status });
+    } catch (error) {
+      logError(this.context, '[FileScanEventRepository.ts][updateEventStatus] Failed', error as Error, {
+        eventId,
+        status,
+      });
+      throw error;
+    }
+  }
 }

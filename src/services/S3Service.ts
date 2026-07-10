@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { logDebug, logError, logInfo } from '../utils/logger.js';
 import type { IS3Service } from '../types/scan.types.js';
@@ -102,7 +102,7 @@ export class S3Service implements IS3Service {
     try {
       const copyCommand = new CopyObjectCommand({
         Bucket: destinationBucket,
-        CopySource: `${sourceBucket}/${sourceKey}`,
+        CopySource: `${sourceBucket}/${encodeURIComponent(sourceKey).replace(/%2F/g, '/')}`,
         Key: destinationKey,
       });
 
@@ -125,6 +125,28 @@ export class S3Service implements IS3Service {
         destinationKey,
       });
       logError(this.context, '[S3Service.ts][copyFile] ENDS with error');
+      throw error;
+    }
+  }
+
+  async deleteFile(bucket: string, key: string): Promise<void> {
+    logInfo(this.context, '[S3Service.ts][deleteFile] STARTS', { bucket, key });
+
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        })
+      );
+      logInfo(this.context, '[S3Service.ts][deleteFile] File deleted successfully', { bucket, key });
+      logInfo(this.context, '[S3Service.ts][deleteFile] ENDS');
+    } catch (error) {
+      logError(this.context, '[S3Service.ts][deleteFile] Failed to delete file from S3', error as Error, {
+        bucket,
+        key,
+      });
+      logError(this.context, '[S3Service.ts][deleteFile] ENDS with error');
       throw error;
     }
   }

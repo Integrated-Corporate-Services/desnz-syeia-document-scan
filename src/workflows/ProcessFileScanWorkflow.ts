@@ -2,7 +2,7 @@ import type { IUploadedFileRepository, IFileScanEventRepository, IS3Service, ICl
 import { SCAN_STATUS, SCAN_RESULT, EVENT_STATUS } from '../constants/scan.constants.js';
 import { FileNotFoundError, ScanAlreadyProcessedError } from '../errors/business.errors.js';
 import { getS3Config } from '../config/config.js';
-import { logInfo, logError, logDebug } from '../utils/logger.js';
+import { logInfo, logError, logDebug, logWarn } from '../utils/logger.js';
 
 export class ProcessFileScanWorkflow {
   constructor(
@@ -42,6 +42,15 @@ export class ProcessFileScanWorkflow {
       scanStatus: file.scan_status,
     });
 
+    await this.uploadedFileRepo.updateScanStatus(
+      fileId,
+      SCAN_STATUS.PROCESSING,
+      null,
+      null,
+      new Date(),
+      null
+    );
+
     if (!file.s3_key || !file.bucket_name) {
       logError('ProcessFileScanWorkflow', 'File missing S3 information', undefined, {
         fileId,
@@ -80,12 +89,15 @@ export class ProcessFileScanWorkflow {
     eventId = recorded.eventId;
     logInfo('ProcessFileScanWorkflow', 'Scan event recorded, starting scan', { eventId, fileId });
 
+    const uploadBucket = file.bucket_name;
+    const uploadKey = file.s3_key;
+
     try {
       logDebug('ProcessFileScanWorkflow', 'Retrieving file stream from S3', {
-        bucketName: file.bucket_name,
-        s3Key: file.s3_key,
+        bucketName: uploadBucket,
+        s3Key: uploadKey,
       });
-      const fileStream = await this.s3Service.getFileStream(file.bucket_name, file.s3_key);
+      const fileStream = await this.s3Service.getFileStream(uploadBucket, uploadKey);
       logInfo('ProcessFileScanWorkflow', 'File stream retrieved successfully', { fileId });
 
       logInfo('ProcessFileScanWorkflow', 'Starting virus scan', { fileId, filename: file.filename });
@@ -102,19 +114,20 @@ export class ProcessFileScanWorkflow {
       }
 
       const destinationBucket = scanResult.isClean ? cleanBucket : quarantineBucket;
-      const destinationKey = file.s3_key;
+      const destinationKey = uploadKey;
+      const resultLabel = scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED;
 
-      logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket (upload bucket unchanged)', {
+      logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket', {
         fileId,
-        sourceBucket: file.bucket_name,
-        sourceKey: file.s3_key,
+        sourceBucket: uploadBucket,
+        sourceKey: uploadKey,
         destinationBucket,
         destinationKey,
-        scanResult: scanResult.isClean ? 'CLEAN' : 'INFECTED',
+        scanResult: resultLabel,
       });
       await this.s3Service.copyFile(
-        file.bucket_name,
-        file.s3_key,
+        uploadBucket,
+        uploadKey,
         destinationBucket,
         destinationKey
       );
@@ -124,25 +137,47 @@ export class ProcessFileScanWorkflow {
         destinationKey,
       });
 
+      // Remove original from upload bucket so downloads can only come from clean/quarantine locations.
+      try {
+        await this.s3Service.deleteFile(uploadBucket, uploadKey);
+        logInfo('ProcessFileScanWorkflow', 'Original removed from upload bucket', {
+          fileId,
+          uploadBucket,
+          uploadKey,
+        });
+      } catch (deleteError) {
+        logWarn('ProcessFileScanWorkflow', 'Failed to delete original from upload bucket (continuing)', {
+          fileId,
+          uploadBucket,
+          uploadKey,
+          error: (deleteError as Error).message,
+        });
+      }
+
       logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
         fileId,
         scanStatus: SCAN_STATUS.COMPLETED,
-        scanResult: scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED,
+        scanResult: resultLabel,
         virusName: scanResult.virusName,
+        bucketName: destinationBucket,
       });
       await this.uploadedFileRepo.updateScanStatus(
         fileId,
         SCAN_STATUS.COMPLETED,
-        scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED,
+        resultLabel,
         scanResult.virusName,
-        new Date()
+        new Date(),
+        destinationBucket
       );
+
+      await this.fileScanEventRepo.updateEventStatus(eventId, EVENT_STATUS.COMPLETED);
 
       logInfo('ProcessFileScanWorkflow', 'File scan workflow completed successfully', {
         fileId,
         eventId,
         isClean: scanResult.isClean,
         virusName: scanResult.virusName,
+        destinationBucket,
       });
     } catch (error) {
       const err = error as Error;
@@ -159,6 +194,17 @@ export class ProcessFileScanWorkflow {
         null,
         new Date()
       );
+
+      if (eventId) {
+        try {
+          await this.fileScanEventRepo.updateEventStatus(eventId, EVENT_STATUS.FAILED);
+        } catch (eventUpdateError) {
+          logWarn('ProcessFileScanWorkflow', 'Failed to mark scan event as FAILED', {
+            eventId,
+            error: (eventUpdateError as Error).message,
+          });
+        }
+      }
 
       throw error;
     }
