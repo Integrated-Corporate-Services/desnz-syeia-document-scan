@@ -117,6 +117,14 @@ export class ProcessFileScanWorkflow {
       const destinationKey = uploadKey;
       const resultLabel = scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED;
 
+      // Local SSO roles are often denied GetObject on clean/quarantine buckets.
+      // Keep the original in the upload bucket and leave bucket_name pointing there so
+      // local backend presigned downloads still work.
+      const keepUploadOriginal =
+        process.env.KEEP_UPLOAD_ORIGINALS === 'true' ||
+        process.env.NODE_ENV === 'local' ||
+        process.env.SIMULATE_SCAN === 'true';
+
       logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket', {
         fileId,
         sourceBucket: uploadBucket,
@@ -124,6 +132,7 @@ export class ProcessFileScanWorkflow {
         destinationBucket,
         destinationKey,
         scanResult: resultLabel,
+        keepUploadOriginal,
       });
       await this.s3Service.copyFile(
         uploadBucket,
@@ -137,29 +146,39 @@ export class ProcessFileScanWorkflow {
         destinationKey,
       });
 
-      // Remove original from upload bucket so downloads can only come from clean/quarantine locations.
-      try {
-        await this.s3Service.deleteFile(uploadBucket, uploadKey);
-        logInfo('ProcessFileScanWorkflow', 'Original removed from upload bucket', {
+      if (!keepUploadOriginal) {
+        // Remove original from upload bucket so downloads can only come from clean/quarantine locations.
+        try {
+          await this.s3Service.deleteFile(uploadBucket, uploadKey);
+          logInfo('ProcessFileScanWorkflow', 'Original removed from upload bucket', {
+            fileId,
+            uploadBucket,
+            uploadKey,
+          });
+        } catch (deleteError) {
+          logWarn('ProcessFileScanWorkflow', 'Failed to delete original from upload bucket (continuing)', {
+            fileId,
+            uploadBucket,
+            uploadKey,
+            error: (deleteError as Error).message,
+          });
+        }
+      } else {
+        logInfo('ProcessFileScanWorkflow', 'Keeping original in upload bucket for local downloads', {
           fileId,
           uploadBucket,
           uploadKey,
-        });
-      } catch (deleteError) {
-        logWarn('ProcessFileScanWorkflow', 'Failed to delete original from upload bucket (continuing)', {
-          fileId,
-          uploadBucket,
-          uploadKey,
-          error: (deleteError as Error).message,
         });
       }
+
+      const downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
 
       logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
         fileId,
         scanStatus: SCAN_STATUS.COMPLETED,
         scanResult: resultLabel,
         virusName: scanResult.virusName,
-        bucketName: destinationBucket,
+        bucketName: downloadBucket,
       });
       await this.uploadedFileRepo.updateScanStatus(
         fileId,
@@ -167,7 +186,7 @@ export class ProcessFileScanWorkflow {
         resultLabel,
         scanResult.virusName,
         new Date(),
-        destinationBucket
+        downloadBucket
       );
 
       await this.fileScanEventRepo.updateEventStatus(eventId, EVENT_STATUS.COMPLETED);
@@ -178,6 +197,7 @@ export class ProcessFileScanWorkflow {
         isClean: scanResult.isClean,
         virusName: scanResult.virusName,
         destinationBucket,
+        downloadBucket,
       });
     } catch (error) {
       const err = error as Error;

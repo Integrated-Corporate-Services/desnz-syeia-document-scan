@@ -27,7 +27,7 @@ export class ClamAVService implements IClamAVClient {
     
     if (this.simulateMode) {
       logInfo(this.context, '[ClamAVService.ts][scanStream] Simulating virus scan (SIMULATE_SCAN=true)');
-      const result = this.simulateScan();
+      const result = await this.simulateScan(fileStream);
       logInfo(this.context, '[ClamAVService.ts][scanStream] ENDS');
       return result;
     }
@@ -146,15 +146,32 @@ export class ClamAVService implements IClamAVClient {
     });
   }
 
-  private simulateScan(): ScanResultResponse {
+  /**
+   * Local-only scan stub. Detects the standard EICAR test string so INFECTED
+   * UI/API paths can be exercised without clamd. All other content = CLEAN.
+   */
+  private async simulateScan(fileStream: Readable): Promise<ScanResultResponse> {
     logInfo(this.context, '[ClamAVService.ts][simulateScan] STARTS');
-    logInfo(this.context, '[ClamAVService.ts][simulateScan] Simulating scan result (all files marked as clean)');
-    
-    const result = {
-      isClean: true,
-      virusName: null,
-    };
-    
+
+    const eicarMarker = 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE';
+    const chunks: Buffer[] = [];
+
+    for await (const chunk of fileStream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    const payload = Buffer.concat(chunks);
+    const isEicar = payload.toString('utf8').includes(eicarMarker);
+
+    const result: ScanResultResponse = isEicar
+      ? { isClean: false, virusName: 'Eicar-Test-Signature' }
+      : { isClean: true, virusName: null };
+
+    logInfo(this.context, '[ClamAVService.ts][simulateScan] Simulated scan result', {
+      isClean: result.isClean,
+      virusName: result.virusName,
+      bytesRead: payload.length,
+    });
     logInfo(this.context, '[ClamAVService.ts][simulateScan] ENDS');
     return result;
   }

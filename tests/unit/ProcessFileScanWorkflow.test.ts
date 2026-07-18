@@ -31,6 +31,10 @@ describe('ProcessFileScanWorkflow segregation', () => {
     process.env.QUARANTINE_BUCKET = quarantineBucket;
     process.env.S3_CLEAN_BUCKET = cleanBucket;
     process.env.S3_QUARANTINE_BUCKET = quarantineBucket;
+    // Production segregation path for these unit tests.
+    delete process.env.KEEP_UPLOAD_ORIGINALS;
+    delete process.env.SIMULATE_SCAN;
+    process.env.NODE_ENV = 'test';
   });
 
   function createMocks(isClean: boolean) {
@@ -111,6 +115,29 @@ describe('ProcessFileScanWorkflow segregation', () => {
       'Eicar-Test-Signature',
       expect.any(Date),
       quarantineBucket
+    );
+  });
+
+  it('keeps upload original and DB bucket when KEEP_UPLOAD_ORIGINALS=true (local SSO downloads)', async () => {
+    process.env.KEEP_UPLOAD_ORIGINALS = 'true';
+    const { workflow, uploadedFileRepo, s3Service } = createMocks(true);
+
+    await workflow.execute({ fileId, eventId });
+
+    expect(s3Service.copyFile).toHaveBeenCalledWith(
+      uploadBucket,
+      s3Key,
+      cleanBucket,
+      s3Key
+    );
+    expect(s3Service.deleteFile).not.toHaveBeenCalled();
+    expect(uploadedFileRepo.updateScanStatus).toHaveBeenLastCalledWith(
+      fileId,
+      SCAN_STATUS.COMPLETED,
+      SCAN_RESULT.CLEAN,
+      null,
+      expect.any(Date),
+      uploadBucket
     );
   });
 });
