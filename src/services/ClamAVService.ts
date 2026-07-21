@@ -1,6 +1,7 @@
 import { Readable } from 'stream';
 import * as net from 'net';
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js';
+import { parseClamAvResponse } from '../utils/clamavParseResponse.js';
 import type { ScanResultResponse, IClamAVClient } from '../types/scan.types.js';
 import { AWS_CONSTANTS } from '../constants/aws.constants.js';
 
@@ -178,44 +179,32 @@ export class ClamAVService implements IClamAVClient {
 
   private parseResponse(response: string): ScanResultResponse {
     logDebug(this.context, '[ClamAVService.ts][parseResponse] STARTS');
-    
-    const trimmed = response.trim();
-    
+
     logDebug(this.context, '[ClamAVService.ts][parseResponse] Parsing ClamAV response', {
-      response: trimmed,
-      length: trimmed.length,
+      response: response.trim(),
+      length: response.trim().length,
     });
-    
-    if (trimmed.includes('OK')) {
-      logInfo(this.context, '[ClamAVService.ts][parseResponse] File is clean (no virus detected)');
-      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
-      return {
-        isClean: true,
-        virusName: null,
-      };
-    }
 
-    if (trimmed.includes('FOUND')) {
-      const match = trimmed.match(/stream: (.+?) FOUND/);
-      const virusName = match ? match[1] || null : null;
-      
-      logWarn(this.context, '[ClamAVService.ts][parseResponse] Virus detected in file', {
-        virusName,
-        rawResponse: trimmed,
+    try {
+      const result = parseClamAvResponse(response);
+
+      if (result.isClean) {
+        logInfo(this.context, '[ClamAVService.ts][parseResponse] File is clean (no virus detected)');
+      } else {
+        logWarn(this.context, '[ClamAVService.ts][parseResponse] Virus detected in file', {
+          virusName: result.virusName,
+          rawResponse: response.trim(),
+        });
+      }
+
+      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
+      return result;
+    } catch (error) {
+      logError(this.context, '[ClamAVService.ts][parseResponse] Unexpected ClamAV response format', error as Error, {
+        response: response.trim(),
       });
-
-      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
-      return {
-        isClean: false,
-        virusName,
-      };
+      logError(this.context, '[ClamAVService.ts][parseResponse] ENDS with error');
+      throw error;
     }
-
-    logError(this.context, '[ClamAVService.ts][parseResponse] Unexpected ClamAV response format', undefined, {
-      response: trimmed,
-    });
-    logError(this.context, '[ClamAVService.ts][parseResponse] ENDS with error');
-
-    throw new Error(`Unexpected ClamAV response: ${trimmed}`);
   }
 }

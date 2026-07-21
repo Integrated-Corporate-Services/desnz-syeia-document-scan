@@ -1,20 +1,6 @@
-/**
- * Unit-style checks for ClamAV response parsing (EICAR / clean).
- * Mirrors ClamAVService.parseResponse behaviour without needing clamd.
- */
-function parseClamAvResponse(response: string): { isClean: boolean; virusName: string | null } {
-  const trimmed = response.trim();
-  if (trimmed.includes('OK')) {
-    return { isClean: true, virusName: null };
-  }
-  if (trimmed.includes('FOUND')) {
-    const match = trimmed.match(/stream: (.+?) FOUND/);
-    return { isClean: false, virusName: match ? match[1] || null : null };
-  }
-  throw new Error(`Unexpected ClamAV response: ${trimmed}`);
-}
+import { parseClamAvResponse } from '../../src/utils/clamavParseResponse';
 
-describe('ClamAV EICAR / clean response parsing', () => {
+describe('parseClamAvResponse', () => {
   it('marks clean stream as CLEAN', () => {
     expect(parseClamAvResponse('stream: OK')).toEqual({
       isClean: true,
