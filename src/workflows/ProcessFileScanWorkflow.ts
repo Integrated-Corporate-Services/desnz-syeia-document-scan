@@ -117,13 +117,9 @@ export class ProcessFileScanWorkflow {
       const destinationKey = uploadKey;
       const resultLabel = scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED;
 
-      // Local SSO roles are often denied GetObject on clean/quarantine buckets.
-      // Keep the original in the upload bucket and leave bucket_name pointing there so
-      // local backend presigned downloads still work.
-      const keepUploadOriginal =
-        process.env.KEEP_UPLOAD_ORIGINALS === 'true' ||
-        process.env.NODE_ENV === 'local' ||
-        process.env.SIMULATE_SCAN === 'true';
+      // Production default: delete upload original after copy so downloads only use clean/quarantine.
+      // KEEP_UPLOAD_ORIGINALS=true is a local-only override (does not change DB bucket_name).
+      const keepUploadOriginal = process.env.KEEP_UPLOAD_ORIGINALS === 'true';
 
       logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket', {
         fileId,
@@ -164,14 +160,15 @@ export class ProcessFileScanWorkflow {
           });
         }
       } else {
-        logInfo('ProcessFileScanWorkflow', 'Keeping original in upload bucket for local downloads', {
+        logInfo('ProcessFileScanWorkflow', 'Keeping original in upload bucket (KEEP_UPLOAD_ORIGINALS=true)', {
           fileId,
           uploadBucket,
           uploadKey,
         });
       }
 
-      const downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
+      // Always record the segregation bucket — downloads must use clean/quarantine after scan.
+      const downloadBucket = destinationBucket;
 
       logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
         fileId,
