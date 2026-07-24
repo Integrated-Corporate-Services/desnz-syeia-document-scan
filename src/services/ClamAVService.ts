@@ -155,14 +155,30 @@ export class ClamAVService implements IClamAVClient {
     logInfo(this.context, '[ClamAVService.ts][simulateScan] STARTS');
 
     const eicarMarker = 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE';
-    const chunks: Buffer[] = [];
+    // The EICAR marker sits at the very start of the test file, so we only need to
+    // inspect a small window. This avoids buffering the whole file into memory.
+    const MAX_INSPECTION_BYTES = 8192;
+    const overlap = eicarMarker.length - 1;
+
+    let isEicar = false;
+    let bytesInspected = 0;
+    // Keep only the tail of the previous chunk so a marker split across chunk
+    // boundaries is still detected without retaining the entire file.
+    let carry = '';
 
     for await (const chunk of fileStream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const window = carry + buf.toString('utf8');
+      if (window.includes(eicarMarker)) {
+        isEicar = true;
+        break; // breaking the for-await closes/destroys the source stream
+      }
+      carry = window.slice(-overlap);
+      bytesInspected += buf.length;
+      if (bytesInspected >= MAX_INSPECTION_BYTES) {
+        break;
+      }
     }
-
-    const payload = Buffer.concat(chunks);
-    const isEicar = payload.toString('utf8').includes(eicarMarker);
 
     const result: ScanResultResponse = isEicar
       ? { isClean: false, virusName: 'Eicar-Test-Signature' }
@@ -171,7 +187,7 @@ export class ClamAVService implements IClamAVClient {
     logInfo(this.context, '[ClamAVService.ts][simulateScan] Simulated scan result', {
       isClean: result.isClean,
       virusName: result.virusName,
-      bytesRead: payload.length,
+      bytesInspected,
     });
     logInfo(this.context, '[ClamAVService.ts][simulateScan] ENDS');
     return result;

@@ -32,7 +32,7 @@ export interface IUploadedFileRepository {
     scanStatus: string,
     scanResult: string | null,
     virusName: string | null,
-    scannedAt: Date,
+    scannedAt: Date | null,
     bucketName?: string | null
   ): Promise<void>;
 }

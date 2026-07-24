@@ -81,7 +81,7 @@ export class UploadedFileRepository implements IUploadedFileRepository {
     scanStatus: string,
     scanResult: string | null,
     virusName: string | null,
-    scannedAt: Date,
+    scannedAt: Date | null,
     bucketName?: string | null
   ): Promise<void> {
     logDebug(this.context, '[UploadedFileRepository.ts][updateScanStatus] STARTS', {

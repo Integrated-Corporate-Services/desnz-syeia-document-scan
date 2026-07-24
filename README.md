@@ -29,7 +29,7 @@ DLQ (failures)
 - Scans files using ClamAV (clamd daemon)
 - **Shares PostgreSQL database with backend application**
 - Updates `uploaded_files` table with scan results
-- Copies clean/infected files into `CLEAN_BUCKET` / `QUARANTINE_BUCKET` (originals stay in the upload bucket for existing downloads)
+- Copies clean/infected files into `CLEAN_BUCKET` / `QUARANTINE_BUCKET` and, by default, deletes the upload original and repoints `uploaded_files.bucket_name` to the clean/quarantine bucket (set `KEEP_UPLOAD_ORIGINALS=true` for local runs to keep the original and leave `bucket_name` on the upload bucket)
 - Supports idempotent, resilient processing
 - Uses DLQ for failure handling
 
@@ -152,7 +152,9 @@ For S3 events the worker resolves `fileId` from `uploaded_files.s3_key` and lets
 | CLEAN    | `CLEAN_BUCKET` (e.g. `s3-eip-dev-doc-scan-clean`) |
 | INFECTED | `QUARANTINE_BUCKET` (e.g. `s3-eip-dev-doc-scan-quarantine`) |
 
-The upload bucket object is **not deleted** and `uploaded_files.bucket_name` is **unchanged**, so existing backend presigned download URLs keep working.
+By default (production) the upload bucket object is **deleted** after the copy and `uploaded_files.bucket_name` is **updated** to the clean/quarantine bucket, so downloads shift to the segregated buckets after a scan. Set `KEEP_UPLOAD_ORIGINALS=true` (local only) to keep the original object in the upload bucket and leave `uploaded_files.bucket_name` pointing at the upload bucket.
+
+The DB is updated with the scan result and destination bucket **before** the original is deleted, so a delete failure cannot leave the record pointing at a missing object.
 
 ### Database Updates
 

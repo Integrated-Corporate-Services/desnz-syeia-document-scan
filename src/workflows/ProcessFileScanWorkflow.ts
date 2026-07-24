@@ -42,15 +42,6 @@ export class ProcessFileScanWorkflow {
       scanStatus: file.scan_status,
     });
 
-    await this.uploadedFileRepo.updateScanStatus(
-      fileId,
-      SCAN_STATUS.PROCESSING,
-      null,
-      null,
-      new Date(),
-      null
-    );
-
     if (!file.s3_key || !file.bucket_name) {
       logError('ProcessFileScanWorkflow', 'File missing S3 information', undefined, {
         fileId,
@@ -88,6 +79,18 @@ export class ProcessFileScanWorkflow {
 
     eventId = recorded.eventId;
     logInfo('ProcessFileScanWorkflow', 'Scan event recorded, starting scan', { eventId, fileId });
+
+    // Mark PROCESSING only after S3 validation and event idempotency checks pass,
+    // so a pre-scan failure can't leave the row stuck in PROCESSING. scanned_at is
+    // left untouched here because it represents the scan completion timestamp.
+    await this.uploadedFileRepo.updateScanStatus(
+      fileId,
+      SCAN_STATUS.PROCESSING,
+      null,
+      null,
+      null,
+      null
+    );
 
     const uploadBucket = file.bucket_name;
     const uploadKey = file.s3_key;
@@ -142,8 +145,44 @@ export class ProcessFileScanWorkflow {
         destinationKey,
       });
 
+      // KEEP_UPLOAD_ORIGINALS=true keeps the original object AND the DB bucket_name on
+      // the upload bucket (local SSO downloads). In production the original is deleted and
+      // bucket_name points at the clean/quarantine bucket.
+      const downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
+
+      // Persist scan result + download bucket BEFORE deleting the original, so a delete
+      // failure can never leave the DB pointing at a bucket whose object no longer exists.
+      logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
+        fileId,
+        scanStatus: SCAN_STATUS.COMPLETED,
+        scanResult: resultLabel,
+        virusName: scanResult.virusName,
+        bucketName: downloadBucket,
+      });
+      await this.uploadedFileRepo.updateScanStatus(
+        fileId,
+        SCAN_STATUS.COMPLETED,
+        resultLabel,
+        scanResult.virusName,
+        new Date(),
+        downloadBucket
+      );
+
+      // Event bookkeeping only: a failure here must NOT flip the file to FAILED, since the
+      // scan, copy and DB update have already succeeded.
+      try {
+        await this.fileScanEventRepo.updateEventStatus(eventId, EVENT_STATUS.COMPLETED);
+      } catch (eventUpdateError) {
+        logWarn('ProcessFileScanWorkflow', 'Failed to mark scan event COMPLETED (scan already succeeded)', {
+          fileId,
+          eventId,
+          error: (eventUpdateError as Error).message,
+        });
+      }
+
       if (!keepUploadOriginal) {
-        // Remove original from upload bucket so downloads can only come from clean/quarantine locations.
+        // Best-effort removal of the original now that the DB is consistent, so downloads
+        // only come from clean/quarantine locations.
         try {
           await this.s3Service.deleteFile(uploadBucket, uploadKey);
           logInfo('ProcessFileScanWorkflow', 'Original removed from upload bucket', {
@@ -166,27 +205,6 @@ export class ProcessFileScanWorkflow {
           uploadKey,
         });
       }
-
-      // Always record the segregation bucket — downloads must use clean/quarantine after scan.
-      const downloadBucket = destinationBucket;
-
-      logDebug('ProcessFileScanWorkflow', 'Updating database with scan results', {
-        fileId,
-        scanStatus: SCAN_STATUS.COMPLETED,
-        scanResult: resultLabel,
-        virusName: scanResult.virusName,
-        bucketName: downloadBucket,
-      });
-      await this.uploadedFileRepo.updateScanStatus(
-        fileId,
-        SCAN_STATUS.COMPLETED,
-        resultLabel,
-        scanResult.virusName,
-        new Date(),
-        downloadBucket
-      );
-
-      await this.fileScanEventRepo.updateEventStatus(eventId, EVENT_STATUS.COMPLETED);
 
       logInfo('ProcessFileScanWorkflow', 'File scan workflow completed successfully', {
         fileId,

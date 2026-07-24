@@ -5,23 +5,32 @@ import type { ScanResultResponse } from '../types/scan.types.js';
  * Exported so unit tests exercise the same logic as ClamAVService.
  */
 export function parseClamAvResponse(response: string): ScanResultResponse {
-  const trimmed = response.trim();
+  // clamd terminates INSTREAM replies with a NUL byte and may include blank lines;
+  // strip NULs and inspect the last non-empty status line.
+  const cleaned = response.replace(/\0/g, '').trim();
+  const line =
+    cleaned
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .pop() || '';
 
-  if (trimmed.includes('OK')) {
+  // Check FOUND before OK, and anchor the match, so virus names containing "OK"
+  // (e.g. "Win.Test.OK-1") are not misclassified as clean.
+  const foundMatch = line.match(/^stream:\s+(.+?)\s+FOUND$/);
+  if (foundMatch) {
+    return {
+      isClean: false,
+      virusName: foundMatch[1] || null,
+    };
+  }
+
+  if (/^stream:\s+OK$/.test(line)) {
     return {
       isClean: true,
       virusName: null,
     };
   }
 
-  if (trimmed.includes('FOUND')) {
-    const match = trimmed.match(/stream: (.+?) FOUND/);
-    const virusName = match ? match[1] || null : null;
-    return {
-      isClean: false,
-      virusName,
-    };
-  }
-
-  throw new Error(`Unexpected ClamAV response: ${trimmed}`);
+  throw new Error(`Unexpected ClamAV response: ${cleaned}`);
 }
