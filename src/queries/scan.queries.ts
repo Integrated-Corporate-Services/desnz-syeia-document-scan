@@ -11,6 +11,12 @@ export const FILE_SCAN_QUERIES = {
     ON CONFLICT (event_id) DO NOTHING
     RETURNING event_id
   `,
+
+  UPDATE_EVENT_STATUS: `
+    UPDATE public.file_scan_events
+    SET status = $2
+    WHERE event_id = $1
+  `,
 } as const;
 
 export const UPLOADED_FILE_QUERIES = {
@@ -37,7 +43,8 @@ export const UPLOADED_FILE_QUERIES = {
     SET scan_status = $2,
         scan_result = $3,
         virus_name = $4,
-        scanned_at = $5
+        scanned_at = $5,
+        bucket_name = COALESCE($6, bucket_name)
     WHERE id = $1
   `,
 } as const;

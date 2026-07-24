@@ -1,6 +1,7 @@
 import { Readable } from 'stream';
 import * as net from 'net';
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js';
+import { parseClamAvResponse } from '../utils/clamavParseResponse.js';
 import type { ScanResultResponse, IClamAVClient } from '../types/scan.types.js';
 import { AWS_CONSTANTS } from '../constants/aws.constants.js';
 
@@ -27,7 +28,7 @@ export class ClamAVService implements IClamAVClient {
     
     if (this.simulateMode) {
       logInfo(this.context, '[ClamAVService.ts][scanStream] Simulating virus scan (SIMULATE_SCAN=true)');
-      const result = this.simulateScan();
+      const result = await this.simulateScan(fileStream);
       logInfo(this.context, '[ClamAVService.ts][scanStream] ENDS');
       return result;
     }
@@ -146,59 +147,80 @@ export class ClamAVService implements IClamAVClient {
     });
   }
 
-  private simulateScan(): ScanResultResponse {
+  /**
+   * Local-only scan stub. Detects the standard EICAR test string so INFECTED
+   * UI/API paths can be exercised without clamd. All other content = CLEAN.
+   */
+  private async simulateScan(fileStream: Readable): Promise<ScanResultResponse> {
     logInfo(this.context, '[ClamAVService.ts][simulateScan] STARTS');
-    logInfo(this.context, '[ClamAVService.ts][simulateScan] Simulating scan result (all files marked as clean)');
-    
-    const result = {
-      isClean: true,
-      virusName: null,
-    };
-    
+
+    const eicarMarker = 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE';
+    // The EICAR marker sits at the very start of the test file, so we only need to
+    // inspect a small window. This avoids buffering the whole file into memory.
+    const MAX_INSPECTION_BYTES = 8192;
+    const overlap = eicarMarker.length - 1;
+
+    let isEicar = false;
+    let bytesInspected = 0;
+    // Keep only the tail of the previous chunk so a marker split across chunk
+    // boundaries is still detected without retaining the entire file.
+    let carry = '';
+
+    for await (const chunk of fileStream) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const window = carry + buf.toString('utf8');
+      if (window.includes(eicarMarker)) {
+        isEicar = true;
+        break; // breaking the for-await closes/destroys the source stream
+      }
+      carry = window.slice(-overlap);
+      bytesInspected += buf.length;
+      if (bytesInspected >= MAX_INSPECTION_BYTES) {
+        break;
+      }
+    }
+
+    const result: ScanResultResponse = isEicar
+      ? { isClean: false, virusName: 'Eicar-Test-Signature' }
+      : { isClean: true, virusName: null };
+
+    logInfo(this.context, '[ClamAVService.ts][simulateScan] Simulated scan result', {
+      isClean: result.isClean,
+      virusName: result.virusName,
+      bytesInspected,
+    });
     logInfo(this.context, '[ClamAVService.ts][simulateScan] ENDS');
     return result;
   }
 
   private parseResponse(response: string): ScanResultResponse {
     logDebug(this.context, '[ClamAVService.ts][parseResponse] STARTS');
-    
-    const trimmed = response.trim();
-    
+
     logDebug(this.context, '[ClamAVService.ts][parseResponse] Parsing ClamAV response', {
-      response: trimmed,
-      length: trimmed.length,
+      response: response.trim(),
+      length: response.trim().length,
     });
-    
-    if (trimmed.includes('OK')) {
-      logInfo(this.context, '[ClamAVService.ts][parseResponse] File is clean (no virus detected)');
-      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
-      return {
-        isClean: true,
-        virusName: null,
-      };
-    }
 
-    if (trimmed.includes('FOUND')) {
-      const match = trimmed.match(/stream: (.+?) FOUND/);
-      const virusName = match ? match[1] || null : null;
-      
-      logWarn(this.context, '[ClamAVService.ts][parseResponse] Virus detected in file', {
-        virusName,
-        rawResponse: trimmed,
+    try {
+      const result = parseClamAvResponse(response);
+
+      if (result.isClean) {
+        logInfo(this.context, '[ClamAVService.ts][parseResponse] File is clean (no virus detected)');
+      } else {
+        logWarn(this.context, '[ClamAVService.ts][parseResponse] Virus detected in file', {
+          virusName: result.virusName,
+          rawResponse: response.trim(),
+        });
+      }
+
+      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
+      return result;
+    } catch (error) {
+      logError(this.context, '[ClamAVService.ts][parseResponse] Unexpected ClamAV response format', error as Error, {
+        response: response.trim(),
       });
-
-      logDebug(this.context, '[ClamAVService.ts][parseResponse] ENDS');
-      return {
-        isClean: false,
-        virusName,
-      };
+      logError(this.context, '[ClamAVService.ts][parseResponse] ENDS with error');
+      throw error;
     }
-
-    logError(this.context, '[ClamAVService.ts][parseResponse] Unexpected ClamAV response format', undefined, {
-      response: trimmed,
-    });
-    logError(this.context, '[ClamAVService.ts][parseResponse] ENDS with error');
-
-    throw new Error(`Unexpected ClamAV response: ${trimmed}`);
   }
 }

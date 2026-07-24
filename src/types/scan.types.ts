@@ -21,6 +21,7 @@ export interface IS3Service {
     destinationBucket: string,
     destinationKey: string
   ): Promise<void>;
+  deleteFile(bucket: string, key: string): Promise<void>;
 }
 
 export interface IUploadedFileRepository {
@@ -31,7 +32,8 @@ export interface IUploadedFileRepository {
     scanStatus: string,
     scanResult: string | null,
     virusName: string | null,
-    scannedAt: Date
+    scannedAt: Date | null,
+    bucketName?: string | null
   ): Promise<void>;
 }
 
@@ -43,4 +45,5 @@ export interface IFileScanEventRepository {
     status: string,
     eventId?: string
   ): Promise<{ eventId: string } | null>;
+  updateEventStatus(eventId: string, status: string): Promise<void>;
 }

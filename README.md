@@ -29,7 +29,7 @@ DLQ (failures)
 - Scans files using ClamAV (clamd daemon)
 - **Shares PostgreSQL database with backend application**
 - Updates `uploaded_files` table with scan results
-- Segregates files into clean/ and infected/ folders
+- Copies clean/infected files into `CLEAN_BUCKET` / `QUARANTINE_BUCKET` and, by default, deletes the upload original and repoints `uploaded_files.bucket_name` to the clean/quarantine bucket (set `KEEP_UPLOAD_ORIGINALS=true` for local runs to keep the original and leave `bucket_name` on the upload bucket)
 - Supports idempotent, resilient processing
 - Uses DLQ for failure handling
 
@@ -93,7 +93,7 @@ ADD COLUMN IF NOT EXISTS scanned_at timestamp with time zone;
 
 ```sql
 CREATE TABLE IF NOT EXISTS public.file_scan_events(
-    event_id uuid PRIMARY KEY,
+    event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     file_id uuid NOT NULL,
     s3_key text NOT NULL,
     status text NOT NULL,
@@ -101,9 +101,20 @@ CREATE TABLE IF NOT EXISTS public.file_scan_events(
 );
 ```
 
+**Existing databases:** apply if `event_id` has no default yet:
+
+```sql
+ALTER TABLE public.file_scan_events
+  ALTER COLUMN event_id SET DEFAULT gen_random_uuid();
+```
+
 **Migration Status:** ✅ Already applied to `appdb` database
 
 ## SQS Message Format
+
+The worker accepts **either** format:
+
+### Direct (from backend after upload confirm)
 
 ```json
 {
@@ -111,6 +122,20 @@ CREATE TABLE IF NOT EXISTS public.file_scan_events(
   "fileId": "uuid"
 }
 ```
+
+### S3 event (from bucket notifications)
+
+```json
+{
+  "Records": [{
+    "eventSource": "aws:s3",
+    "eventName": "ObjectCreated:Put",
+    "s3": { "object": { "key": "app-id/CATEGORY/filename.pdf" } }
+  }]
+}
+```
+
+For S3 events the worker resolves `fileId` from `uploaded_files.s3_key` and lets PostgreSQL generate `event_id` via `gen_random_uuid()`. Backend messages may still supply `eventId` explicitly.
 
 ## Processing Rules
 
@@ -122,10 +147,14 @@ CREATE TABLE IF NOT EXISTS public.file_scan_events(
 
 ### Segregation Logic
 
-| Result   | Destination     |
-|----------|----------------|
-| CLEAN    | clean/{key}    |
-| INFECTED | infected/{key} |
+| Result   | Copy destination (same object key) |
+|----------|-------------------------------------|
+| CLEAN    | `CLEAN_BUCKET` (e.g. `s3-eip-dev-doc-scan-clean`) |
+| INFECTED | `QUARANTINE_BUCKET` (e.g. `s3-eip-dev-doc-scan-quarantine`) |
+
+By default (production) the upload bucket object is **deleted** after the copy and `uploaded_files.bucket_name` is **updated** to the clean/quarantine bucket, so downloads shift to the segregated buckets after a scan. Set `KEEP_UPLOAD_ORIGINALS=true` (local only) to keep the original object in the upload bucket and leave `uploaded_files.bucket_name` pointing at the upload bucket.
+
+The DB is updated with the scan result and destination bucket **before** the original is deleted, so a delete failure cannot leave the record pointing at a missing object.
 
 ### Database Updates
 
