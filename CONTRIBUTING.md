@@ -38,7 +38,7 @@ git checkout -b feature/my-change
 npm run type-check
 npm test
 npm run build
-# Optional: npm run lint (requires an ESLint config file, e.g. eslint.config.js)
+# Optional: npm run lint
 git commit -m "feat: description"
 git push origin feature/my-change
 ```
