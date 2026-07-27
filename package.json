@@ -2,6 +2,8 @@
   "name": "desnz-syeia-document-scan",
   "description": "ECS task: virus-scans uploaded files using ClamAV, triggered via SQS",
   "version": "1.0.0",
+  "license": "MIT",
+  "author": "DESNZ SYEIA Team",
   "type": "module",
   "engines": {
     "node": "22.x"
