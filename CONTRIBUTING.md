@@ -35,10 +35,10 @@ npm test
 ```bash
 git checkout -b feature/my-change
 # Make changes
-npm run lint
 npm run type-check
 npm test
 npm run build
+# Optional: npm run lint (requires an ESLint config file, e.g. eslint.config.js)
 git commit -m "feat: description"
 git push origin feature/my-change
 ```

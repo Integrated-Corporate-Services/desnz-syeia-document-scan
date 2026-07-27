@@ -3,8 +3,7 @@
 ## Reporting a vulnerability
 
 **DO NOT** open public issues for security vulnerabilities.
-
-**Email:** security@energysecurity.gov.uk  
+ 
 **GitHub:** [Private Security Advisory](https://github.com/DESNZ/document-scan/security/advisories/new)
 
 Include:
