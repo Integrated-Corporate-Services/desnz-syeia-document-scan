@@ -66,5 +66,3 @@ npm audit fix      # Auto-fix (safe)
 
 ---
 
-**Contact:** security@energysecurity.gov.uk
-
