@@ -81,7 +81,7 @@ const HOST = '0.0.0.0';
   });
 
   logger.info('[server.ts][main] Initialising database connection pool…');
-  const pool = getPool();
+  getPool();
   logger.info('[server.ts][main] Database pool created, testing connection…');
   await testConnection();
   logger.info('[server.ts][main] Database connection verified successfully');
