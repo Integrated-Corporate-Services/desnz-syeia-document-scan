@@ -4,7 +4,7 @@
 
 As contributors and maintainers of this UK Government project, we pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
-We are committed to the [Civil Service Code](https://www.gov.uk/government/publications/civil-service-code) values:
+We are committed to the values:
 - **Integrity** - Be honest and objective
 - **Honesty** - Set out facts and relevant issues truthfully
 - **Objectivity** - Base advice on evidence
@@ -40,8 +40,7 @@ This Code of Conduct applies within all project spaces, and it also applies when
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting:
-- **Email:** conduct@energysecurity.gov.uk
-- **GitHub:** [Report abuse](https://github.com/DESNZ/document-scan/security)
+- **GitHub:** [Report abuse](https://github.com/Integrated-Corporate-Services/desnz-syeia-document-scan)
 
 All complaints will be reviewed and investigated promptly and fairly. All project maintainers are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -67,9 +66,6 @@ All complaints will be reviewed and investigated promptly and fairly. All projec
 
 This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/version/2/0/code_of_conduct.html) and aligned with the UK Civil Service Code.
 
-## Questions
-
-For questions about this Code of Conduct, contact: conduct@energysecurity.gov.uk
 
 ---
 
