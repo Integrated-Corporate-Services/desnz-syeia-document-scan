@@ -1,7 +1,6 @@
 import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { logInfo, logError, logWarn, logDebug } from '../utils/logger.js';
+import { logInfo, logError } from '../utils/logger.js';
 import { getS3Config } from './config.js';
-import { AWS_CONSTANTS } from '../constants/aws.constants.js';
 
 const context = 'S3Client';
 
