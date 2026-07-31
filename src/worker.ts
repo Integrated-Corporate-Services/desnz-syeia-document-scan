@@ -1,4 +1,4 @@
-import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand, Message } from '@aws-sdk/client-sqs';
+import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand, Message, MessageSystemAttributeName } from '@aws-sdk/client-sqs';
 
 import { ProcessFileScanWorkflow } from './workflows/ProcessFileScanWorkflow.js';
 
@@ -262,7 +262,7 @@ async function pollOnce(queueUrl: string): Promise<void> {
 
       VisibilityTimeout: WORKER_CONSTANTS.SQS_VISIBILITY_TIMEOUT_SECONDS,
 
-      AttributeNames: ['ApproximateReceiveCount'],
+      MessageSystemAttributeNames: [MessageSystemAttributeName.ApproximateReceiveCount],
 
     });
 
@@ -283,7 +283,8 @@ async function pollOnce(queueUrl: string): Promise<void> {
     }
 
 
-    response.Messages.map((message) => processMessage(message, queueUrl))
+    await Promise.allSettled(
+      response.Messages.map((message) => processMessage(message, queueUrl))
     );
 
 
