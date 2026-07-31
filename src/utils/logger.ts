@@ -1,47 +1,29 @@
 import { createLogger, format, transports } from 'winston';
 
-const isCloudEnv = [
-  'prod',
-  'production',
-  'pre-prod',
-  'staging',
-  'dev',
-  'development'
-].includes(process.env.NODE_ENV || '');
+type LogFormat = 'json' | 'pretty';
+function resolveLogFormat(): LogFormat {
+  const explicit = process.env.LOG_FORMAT?.toLowerCase();
+  if (explicit === 'json' || explicit === 'pretty') {
+    return explicit;
+  }
+  return process.stdout.isTTY ? 'pretty' : 'json';
+}
 
-const logLevel = (process.env.LOG_LEVEL || (isCloudEnv ? 'info' : 'debug')).toLowerCase();
+const logFormat = resolveLogFormat();
+const logLevel = (process.env.LOG_LEVEL || (logFormat === 'pretty' ? 'debug' : 'info')).toLowerCase();
+
+const structuredLine = format.printf(({ timestamp, level, message, ...meta }) => {
+  const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+  return `${timestamp} [${level}] ${message}${metaStr}`;
+});
 
 export const logger = createLogger({
   level: logLevel,
-  format: format.combine(
-    format.timestamp(),
-    format.printf(({ timestamp, level, message, ...meta }) => {
-      const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-      return `${timestamp} [${level}] ${message}${metaStr}`;
-    })
-  ),
-  transports: []
+  format: logFormat === 'pretty'
+    ? format.combine(format.colorize(), format.timestamp(), structuredLine)
+    : format.combine(format.timestamp(), format.json()),
+  transports: [new transports.Console()],
 });
-
-if (isCloudEnv) {
-  logger.add(new transports.Console({
-    format: format.combine(
-      format.timestamp(),
-      format.json()
-    ),
-  }));
-} else {
-  logger.add(new transports.Console({
-    format: format.combine(
-      format.colorize(),
-      format.timestamp(),
-      format.printf(({ timestamp, level, message, ...meta }) => {
-        const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-        return `${timestamp} [${level}] ${message}${metaStr}`;
-      })
-    ),
-  }));
-}
 
 export const logInfo = (context: string, message: string, meta?: Record<string, any>) => {
   logger.info(`[${context}] ${message}`, meta);

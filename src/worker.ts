@@ -1,4 +1,4 @@
-import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand, Message } from '@aws-sdk/client-sqs';
+import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand, Message, MessageSystemAttributeName } from '@aws-sdk/client-sqs';
 
 import { ProcessFileScanWorkflow } from './workflows/ProcessFileScanWorkflow.js';
 
@@ -17,6 +17,8 @@ import { logInfo, logError, logWarn, logDebug } from './utils/logger.js';
 import { parseScanMessageBody, type ParsedScanMessage } from './utils/parseScanMessage.js';
 
 import { FileRecordNotReadyError } from './errors/business.errors.js';
+
+import { calculateDeferSeconds } from './utils/backoff.js';
 
 import { WORKER_CONSTANTS } from './constants/worker.constants.js';
 
@@ -260,6 +262,8 @@ async function pollOnce(queueUrl: string): Promise<void> {
 
       VisibilityTimeout: WORKER_CONSTANTS.SQS_VISIBILITY_TIMEOUT_SECONDS,
 
+      MessageSystemAttributeNames: [MessageSystemAttributeName.ApproximateReceiveCount],
+
     });
 
 
@@ -279,12 +283,9 @@ async function pollOnce(queueUrl: string): Promise<void> {
     }
 
 
-
-    for (const message of response.Messages) {
-
-      await processMessage(message, queueUrl);
-
-    }
+    await Promise.allSettled(
+      response.Messages.map((message) => processMessage(message, queueUrl))
+    );
 
 
 
@@ -304,7 +305,7 @@ async function pollOnce(queueUrl: string): Promise<void> {
 
 
 
-async function deferMessage(message: Message, queueUrl: string): Promise<void> {
+async function deferMessage(message: Message, queueUrl: string, receiveCount: number): Promise<void> {
 
   const { ReceiptHandle, MessageId } = message;
 
@@ -316,6 +317,10 @@ async function deferMessage(message: Message, queueUrl: string): Promise<void> {
 
 
 
+  const deferSeconds = calculateDeferSeconds(receiveCount);
+
+
+
   await sqsClient.send(
 
     new ChangeMessageVisibilityCommand({
@@ -324,7 +329,7 @@ async function deferMessage(message: Message, queueUrl: string): Promise<void> {
 
       ReceiptHandle,
 
-      VisibilityTimeout: WORKER_CONSTANTS.SQS_DEFER_VISIBILITY_TIMEOUT_SECONDS,
+      VisibilityTimeout: deferSeconds,
 
     })
 
@@ -336,7 +341,9 @@ async function deferMessage(message: Message, queueUrl: string): Promise<void> {
 
     messageId: MessageId,
 
-    visibilityTimeoutSeconds: WORKER_CONSTANTS.SQS_DEFER_VISIBILITY_TIMEOUT_SECONDS,
+    receiveCount,
+
+    visibilityTimeoutSeconds: deferSeconds,
 
   });
 
@@ -426,15 +433,37 @@ async function processMessage(message: Message, queueUrl: string): Promise<void>
 
     if (error instanceof FileRecordNotReadyError) {
 
-      logWarn(context, '[worker.ts][processMessage] Upload confirm not complete yet, will retry', {
+      const receiveCount = Number(message.Attributes?.ApproximateReceiveCount ?? 1);
 
-        messageId: MessageId,
+      const approachingDlq = receiveCount >= WORKER_CONSTANTS.MAX_RECEIVE_COUNT_THRESHOLD;
 
-        reason: error.message,
 
-      });
 
-      await deferMessage(message, queueUrl);
+      if (approachingDlq) {
+
+        logError(
+          context,
+          '[worker.ts][processMessage] Upload confirm still not complete after repeated attempts - approaching dead-letter queue',
+          error,
+          { messageId: MessageId, receiveCount }
+        );
+      } else {
+
+        logWarn(context, '[worker.ts][processMessage] Upload confirm not complete yet, will retry', {
+
+          messageId: MessageId,
+
+          reason: error.message,
+
+          receiveCount,
+
+        });
+
+      }
+
+
+
+      await deferMessage(message, queueUrl, receiveCount);
 
       logWarn(context, '[worker.ts][processMessage] ENDS (deferred)');
 
