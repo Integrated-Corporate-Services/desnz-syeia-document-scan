@@ -9,6 +9,7 @@ export interface S3Config {
 export interface SqsConfig {
   region: string;
   queueUrl: string;
+  deadLetterQueueUrl: string;
   pollWaitSeconds: number;
   visibilityTimeout: number;
   endpoint?: string;

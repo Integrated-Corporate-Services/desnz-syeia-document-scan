@@ -171,18 +171,21 @@ export function getS3Config(): S3Config {
 
 export function getSqsConfig(): SqsConfig {
   const queueUrl = process.env.SQS_SCAN_QUEUE_URL ?? process.env.SQS_QUEUE_URL ?? '';
-  
+  const deadLetterQueueUrl = process.env.SQS_DLQ_URL ?? '';
+
   logInfo(context, 'SQSConfig resolved', {
     queueUrl: queueUrl || '(NOT SET)',
+    deadLetterQueueUrl: deadLetterQueueUrl || '(NOT SET)',
     region: getAwsRegion(),
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
     visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? 300),
     hasCustomEndpoint: !!process.env.AWS_ENDPOINT,
   });
-  
+
   return {
     region: getAwsRegion(),
     queueUrl,
+    deadLetterQueueUrl,
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? WORKER_CONSTANTS.SQS_WAIT_TIME_SECONDS),
     visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? WORKER_CONSTANTS.SQS_EXTENDED_VISIBILITY_TIMEOUT_SECONDS),
     endpoint: process.env.AWS_ENDPOINT,
