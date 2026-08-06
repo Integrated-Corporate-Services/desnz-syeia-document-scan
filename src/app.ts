@@ -19,7 +19,7 @@ export async function createApp(): Promise<Application> {
 
   app.use(
     cors({
-      origin: process.env.ALLOWED_ORIGIN ?? false,
+      origin: false,
       methods: ['GET'],
     })
   );

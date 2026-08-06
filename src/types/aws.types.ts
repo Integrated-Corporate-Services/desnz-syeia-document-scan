@@ -3,7 +3,6 @@ export interface S3Config {
   uploadsBucket: string;
   cleanBucket: string;
   quarantineBucket: string;
-  endpoint?: string;
 }
 
 export interface SqsConfig {
@@ -12,7 +11,6 @@ export interface SqsConfig {
   deadLetterQueueUrl: string;
   pollWaitSeconds: number;
   visibilityTimeout: number;
-  endpoint?: string;
 }
 
 export interface ClamavConfig {

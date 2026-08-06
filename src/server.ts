@@ -89,7 +89,7 @@ const HOST = '0.0.0.0';
   logger.info('[server.ts][main] Validating SQS configuration…');
   const sqsCfg = getSqsConfig();
   if (!sqsCfg.queueUrl) {
-    throw new Error('SQS queue URL is required but not configured. Check SQS_SCAN_QUEUE_URL or SQS_QUEUE_URL environment variable.');
+    throw new Error('SQS queue URL is required but not configured.');
   }
   logger.info('[server.ts][main] SQS configuration valid', { queueUrl: sqsCfg.queueUrl });
 
