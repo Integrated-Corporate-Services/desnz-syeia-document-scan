@@ -35,16 +35,12 @@ const HOST = '0.0.0.0';
   });
   
   logger.info('S3 Configuration:', {
-    S3_UPLOADS_BUCKET: process.env.S3_UPLOADS_BUCKET,
     UPLOAD_BUCKET: process.env.UPLOAD_BUCKET,
-    S3_CLEAN_BUCKET: process.env.S3_CLEAN_BUCKET,
     CLEAN_BUCKET: process.env.CLEAN_BUCKET,
-    S3_QUARANTINE_BUCKET: process.env.S3_QUARANTINE_BUCKET,
     QUARANTINE_BUCKET: process.env.QUARANTINE_BUCKET,
   });
   
   logger.info('SQS Configuration:', {
-    SQS_SCAN_QUEUE_URL: process.env.SQS_SCAN_QUEUE_URL,
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
   });
   

@@ -2,7 +2,7 @@ import { createLogger, format, transports } from 'winston';
 
 type LogFormat = 'json' | 'pretty';
 const logFormat: LogFormat = process.stdout.isTTY ? 'pretty' : 'json';
-const logLevel = (process.env.LOG_LEVEL || (logFormat === 'pretty' ? 'debug' : 'info')).toLowerCase();
+const logLevel = (process.env.LOG_LEVEL).toLowerCase();
 
 const structuredLine = format.printf(({ timestamp, level, message, ...meta }) => {
   const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';

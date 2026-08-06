@@ -148,9 +148,9 @@ export async function getDbSecretConfig(): Promise<DbCredentials> {
 }
 
 export function getS3Config(): S3Config {
-  const uploadsBucket = process.env.S3_UPLOADS_BUCKET ?? process.env.UPLOAD_BUCKET ?? '';
-  const cleanBucket = process.env.S3_CLEAN_BUCKET ?? process.env.CLEAN_BUCKET ?? '';
-  const quarantineBucket = process.env.S3_QUARANTINE_BUCKET ?? process.env.QUARANTINE_BUCKET ?? '';
+  const uploadsBucket = process.env.UPLOAD_BUCKET ?? '';
+  const cleanBucket = process.env.CLEAN_BUCKET ?? '';
+  const quarantineBucket = process.env.QUARANTINE_BUCKET ?? '';
   
   logInfo(context, 'S3Config resolved', {
     uploadsBucket: uploadsBucket,
@@ -168,7 +168,7 @@ export function getS3Config(): S3Config {
 }
 
 export function getSqsConfig(): SqsConfig {
-  const queueUrl = process.env.SQS_SCAN_QUEUE_URL ?? process.env.SQS_QUEUE_URL ?? '';
+  const queueUrl = process.env.SQS_QUEUE_URL ?? '';
   const deadLetterQueueUrl = process.env.SQS_DLQ_URL ?? '';
 
   logInfo(context, 'SQSConfig resolved', {

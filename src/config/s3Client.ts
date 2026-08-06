@@ -10,9 +10,9 @@ export async function checkS3Connectivity(): Promise<void> {
   logInfo(context, 'Checking S3 connectivity for all buckets...');
   
   const missingBuckets: string[] = [];
-  if (!s3Config.uploadsBucket) missingBuckets.push('S3_UPLOADS_BUCKET or UPLOAD_BUCKET');
-  if (!s3Config.cleanBucket) missingBuckets.push('S3_CLEAN_BUCKET or CLEAN_BUCKET');
-  if (!s3Config.quarantineBucket) missingBuckets.push('S3_QUARANTINE_BUCKET or QUARANTINE_BUCKET');
+  if (!s3Config.uploadsBucket) missingBuckets.push('UPLOAD_BUCKET');
+  if (!s3Config.cleanBucket) missingBuckets.push('CLEAN_BUCKET');
+  if (!s3Config.quarantineBucket) missingBuckets.push('QUARANTINE_BUCKET');
   
   if (missingBuckets.length > 0) {
     const error = new Error(`Missing required S3 bucket configuration: ${missingBuckets.join(', ')}`);
