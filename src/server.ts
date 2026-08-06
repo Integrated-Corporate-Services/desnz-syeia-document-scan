@@ -19,7 +19,7 @@ const HOST = '0.0.0.0';
   logger.info('='.repeat(80));
   
   logger.info('Environment Variables Loaded:', {
-    NODE_ENV: process.env.NODE_ENV,
+    NODE_ENV: process.env.NODE_ENV || '',
     AWS_REGION: process.env.AWS_REGION || process.env.AWS_Region,
     PORT: PORT,
     LOG_LEVEL: process.env.LOG_LEVEL,
