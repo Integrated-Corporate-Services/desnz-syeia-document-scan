@@ -46,7 +46,7 @@ export async function createApp(): Promise<Application> {
     logger.error('[app.ts][createApp] Unhandled error', { error: err.message, stack: err.stack });
     res.status(err.statusCode ?? 500).json({
       error: err.message ?? 'Internal Server Error',
-      ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+      ...(process.env.ENV !== 'production' && { stack: err.stack }),
     });
   });
 
