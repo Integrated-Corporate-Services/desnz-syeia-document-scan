@@ -19,42 +19,39 @@ const HOST = '0.0.0.0';
   logger.info('='.repeat(80));
   
   logger.info('Environment Variables Loaded:', {
-    ENV: process.env.ENV || '(not set)',
-    AWS_REGION: process.env.AWS_REGION || process.env.AWS_Region || '(not set)',
+    NODE_ENV: process.env.NODE_ENV,
+    AWS_REGION: process.env.AWS_REGION || process.env.AWS_Region,
     PORT: PORT,
-    LOG_LEVEL: process.env.LOG_LEVEL || '(not set)',
+    LOG_LEVEL: process.env.LOG_LEVEL,
   });
   
   logger.info('Database Configuration:', {
-    DB_HOST: process.env.DB_HOST || '(not set)',
-    DB_PORT: process.env.DB_PORT || '(not set)',
-    DB_NAME: process.env.DB_NAME || '(not set)',
-    DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : '(not set)',
-    DB_SSLMODE: process.env.DB_SSLMODE || '(not set)',
-    DB_POOL_SIZE: process.env.DB_POOL_SIZE || '(not set)',
-    PGHOST: process.env.PGHOST || '(not set - fallback)',
-    PGPORT: process.env.PGPORT || '(not set - fallback)',
-    PGDATABASE: process.env.PGDATABASE || '(not set - fallback)',
+    DB_HOST: process.env.DB_HOST,
+    DB_PORT: process.env.DB_PORT,
+    DB_NAME: process.env.DB_NAME,
+    DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : undefined,
+    DB_SSLMODE: process.env.DB_SSLMODE,
+    DB_POOL_SIZE: process.env.DB_POOL_SIZE,
   });
   
   logger.info('S3 Configuration:', {
-    S3_UPLOADS_BUCKET: process.env.S3_UPLOADS_BUCKET || '(not set)',
-    UPLOAD_BUCKET: process.env.UPLOAD_BUCKET || '(not set)',
-    S3_CLEAN_BUCKET: process.env.S3_CLEAN_BUCKET || '(not set)',
-    CLEAN_BUCKET: process.env.CLEAN_BUCKET || '(not set)',
-    S3_QUARANTINE_BUCKET: process.env.S3_QUARANTINE_BUCKET || '(not set)',
-    QUARANTINE_BUCKET: process.env.QUARANTINE_BUCKET || '(not set)',
+    S3_UPLOADS_BUCKET: process.env.S3_UPLOADS_BUCKET,
+    UPLOAD_BUCKET: process.env.UPLOAD_BUCKET,
+    S3_CLEAN_BUCKET: process.env.S3_CLEAN_BUCKET,
+    CLEAN_BUCKET: process.env.CLEAN_BUCKET,
+    S3_QUARANTINE_BUCKET: process.env.S3_QUARANTINE_BUCKET,
+    QUARANTINE_BUCKET: process.env.QUARANTINE_BUCKET,
   });
   
   logger.info('SQS Configuration:', {
-    SQS_SCAN_QUEUE_URL: process.env.SQS_SCAN_QUEUE_URL || '(not set)',
-    SQS_QUEUE_URL: process.env.SQS_QUEUE_URL || '(not set)',
+    SQS_SCAN_QUEUE_URL: process.env.SQS_SCAN_QUEUE_URL,
+    SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
   });
   
   logger.info('ClamAV Configuration:', {
-    CLAMAV_HOST: process.env.CLAMAV_HOST || 'localhost (default)',
-    CLAMAV_PORT: process.env.CLAMAV_PORT || '3310 (default)',
-    SIMULATE_SCAN: process.env.SIMULATE_SCAN || 'false (default)',
+    CLAMAV_HOST: process.env.CLAMAV_HOST,
+    CLAMAV_PORT: process.env.CLAMAV_PORT,
+    SIMULATE_SCAN: process.env.SIMULATE_SCAN,
   });
   
   logger.info('='.repeat(80));

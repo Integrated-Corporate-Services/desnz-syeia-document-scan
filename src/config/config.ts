@@ -67,11 +67,11 @@ export async function getSecretConfig(
 
 export function getDbConfig(): DbConfig {
   return {
-    host: process.env.DB_HOST ?? process.env.PGHOST ?? '',
-    port: Number(process.env.DB_PORT ?? process.env.PGPORT ?? DATABASE_CONSTANTS.DEFAULT_PORT),
-    database: process.env.DB_NAME ?? process.env.PGDATABASE ?? '',
-    user: process.env.DB_USER ?? process.env.PGUSER,
-    password: process.env.DB_PASSWORD ?? process.env.PGPASSWORD,
+    host: process.env.DB_HOST ?? '',
+    port: Number(process.env.DB_PORT ?? DATABASE_CONSTANTS.DEFAULT_PORT),
+    database: process.env.DB_NAME ?? '',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
     appName: process.env.APP_NAME ?? 'document-scan-worker',
     poolMax: Number(process.env.DB_POOL_MAX ?? process.env.DB_POOL_SIZE ?? DATABASE_CONSTANTS.DEFAULT_POOL_SIZE),
     idleTimeoutMillis: Number(process.env.DB_IDLE_MS ?? DATABASE_CONSTANTS.DEFAULT_IDLE_TIMEOUT_MS),
@@ -153,9 +153,9 @@ export function getS3Config(): S3Config {
   const quarantineBucket = process.env.S3_QUARANTINE_BUCKET ?? process.env.QUARANTINE_BUCKET ?? '';
   
   logInfo(context, 'S3Config resolved', {
-    uploadsBucket: uploadsBucket || '(NOT SET)',
-    cleanBucket: cleanBucket || '(NOT SET)',
-    quarantineBucket: quarantineBucket || '(NOT SET)',
+    uploadsBucket: uploadsBucket,
+    cleanBucket: cleanBucket,
+    quarantineBucket: quarantineBucket,
     region: getAwsRegion(),
     hasCustomEndpoint: !!(process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT),
   });
@@ -174,8 +174,8 @@ export function getSqsConfig(): SqsConfig {
   const deadLetterQueueUrl = process.env.SQS_DLQ_URL ?? '';
 
   logInfo(context, 'SQSConfig resolved', {
-    queueUrl: queueUrl || '(NOT SET)',
-    deadLetterQueueUrl: deadLetterQueueUrl || '(NOT SET)',
+    queueUrl: queueUrl,
+    deadLetterQueueUrl: deadLetterQueueUrl,
     region: getAwsRegion(),
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? 10),
     visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? 300),

@@ -10,10 +10,10 @@ export function getPool(): Pool {
   if (!pool) {
     logInfo(context, '[databasePool.ts][getPool] STARTS');
     
-    const host = process.env.DB_HOST ?? process.env.PGHOST;
-    const port = parseInt(process.env.DB_PORT ?? process.env.PGPORT ?? String(DATABASE_CONSTANTS.DEFAULT_PORT));
-    const database = process.env.DB_NAME ?? process.env.PGDATABASE;
-    const sslMode = process.env.DB_SSLMODE ?? process.env.PGSSLMODE ?? 'require';
+    const host = process.env.DB_HOST;
+    const port = parseInt(process.env.DB_PORT ?? String(DATABASE_CONSTANTS.DEFAULT_PORT));
+    const database = process.env.DB_NAME;
+    const sslMode = process.env.DB_SSLMODE ?? 'require';
     
     let user: string | undefined;
     let password: string | undefined;
@@ -28,8 +28,8 @@ export function getPool(): Pool {
       }
     }
     
-    if (!user) user = process.env.DB_USER ?? process.env.PGUSER;
-    if (!password) password = process.env.DB_PASSWORD ?? process.env.PGPASSWORD;
+    if (!user) user = process.env.DB_USER;
+    if (!password) password = process.env.DB_PASSWORD;
     
     const config: DatabaseConfig = {
       host,
@@ -44,12 +44,12 @@ export function getPool(): Pool {
     };
 
     logInfo(context, '=== Database Connection Configuration ===', {
-      host: config.host || '(NOT SET - MISSING DB_HOST)',
+      host: config.host,
       port: config.port,
-      database: config.database || '(NOT SET - MISSING DB_NAME)',
-      user: config.user || '(NOT SET - MISSING DB_USER or DB_CREDENTIALS)',
+      database: config.database,
+      user: config.user,
       hasPassword: !!config.password,
-      credentialsSource: process.env.DB_CREDENTIALS ? 'DB_CREDENTIALS (Secrets Manager)' : (process.env.DB_PASSWORD ? 'DB_PASSWORD env var' : '(NOT SET)'),
+      credentialsSource: process.env.DB_CREDENTIALS ? 'DB_CREDENTIALS (Secrets Manager)' : (process.env.DB_PASSWORD ? 'DB_PASSWORD env var' : undefined),
       sslMode: sslMode,
       sslEnabled: !!config.ssl,
       maxConnections: config.max,
@@ -67,19 +67,13 @@ export function getPool(): Pool {
       
       logError(context, `CRITICAL: Missing required database environment variables: ${missing.join(', ')}`, new Error('Database configuration incomplete'));
       logError(context, 'Available environment variables:', {
-        DB_HOST: process.env.DB_HOST || '(not set)',
-        DB_PORT: process.env.DB_PORT || '(not set)',
-        DB_NAME: process.env.DB_NAME || '(not set)',
-        DB_USER: process.env.DB_USER || '(not set)',
-        DB_PASSWORD: process.env.DB_PASSWORD ? '***SET***' : '(not set)',
-        DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : '(not set)',
-        DB_SSLMODE: process.env.DB_SSLMODE || '(not set)',
-        PGHOST: process.env.PGHOST || '(not set)',
-        PGPORT: process.env.PGPORT || '(not set)',
-        PGDATABASE: process.env.PGDATABASE || '(not set)',
-        PGUSER: process.env.PGUSER || '(not set)',
-        PGPASSWORD: process.env.PGPASSWORD ? '***SET***' : '(not set)',
-        PGSSLMODE: process.env.PGSSLMODE || '(not set)',
+        DB_HOST: process.env.DB_HOST,
+        DB_PORT: process.env.DB_PORT,
+        DB_NAME: process.env.DB_NAME,
+        DB_USER: process.env.DB_USER,
+        DB_PASSWORD: process.env.DB_PASSWORD ? '***SET***' : undefined,
+        DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : undefined,
+        DB_SSLMODE: process.env.DB_SSLMODE,
       });
       throw new Error(`Missing required database environment variables: ${missing.join(', ')}`);
     }
