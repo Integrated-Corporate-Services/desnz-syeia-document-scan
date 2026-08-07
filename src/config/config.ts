@@ -164,6 +164,7 @@ export function getS3Config(): S3Config {
     uploadsBucket,
     cleanBucket,
     quarantineBucket,
+    endpoint: process.env.S3_ENDPOINT || process.env.AWS_ENDPOINT,
   };
 }
 
@@ -185,6 +186,7 @@ export function getSqsConfig(): SqsConfig {
     deadLetterQueueUrl,
     pollWaitSeconds: Number(process.env.SQS_POLL_WAIT_SECONDS ?? WORKER_CONSTANTS.SQS_WAIT_TIME_SECONDS),
     visibilityTimeout: Number(process.env.SQS_VISIBILITY_TIMEOUT ?? WORKER_CONSTANTS.SQS_EXTENDED_VISIBILITY_TIMEOUT_SECONDS),
+    endpoint: process.env.AWS_ENDPOINT,
   };
 }
 
