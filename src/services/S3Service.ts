@@ -13,27 +13,9 @@ export class S3Service implements IS3Service {
       region: process.env.AWS_REGION || AWS_CONSTANTS.DEFAULT_REGION,
     };
 
-    if (process.env.S3_ENDPOINT) {
-      config.endpoint = process.env.S3_ENDPOINT;
-      config.forcePathStyle = true;
-      logDebug(this.context, 'Using custom S3 endpoint', {
-        endpoint: process.env.S3_ENDPOINT,
-        region: config.region,
-      });
-    }
-
-    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-      config.credentials = {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      };
-      logDebug(this.context, 'Using AWS credentials from environment');
-    }
-
     this.client = new S3Client(config);
     logInfo(this.context, 'S3 client initialized', {
       region: config.region,
-      hasCustomEndpoint: !!process.env.S3_ENDPOINT,
     });
   }
 
