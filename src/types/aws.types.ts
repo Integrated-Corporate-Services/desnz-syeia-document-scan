@@ -4,6 +4,7 @@ export interface S3Config {
   cleanBucket: string;
   quarantineBucket: string;
   endpoint?: string; 
+}
 
 export interface SqsConfig {
   region: string;
