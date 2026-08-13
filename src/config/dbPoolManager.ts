@@ -323,7 +323,7 @@ class DatabasePoolManager {
     const pool = await this.getPool();
     const result = await pool.query(queryText, values);
     return {
-      rows: result.rows,
+      rows: result.rows as T,
       rowCount: result.rowCount || 0,
     };
   }
