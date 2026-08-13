@@ -32,7 +32,7 @@ const sslMode = (process.env.DB_SSLMODE || 'require').toLowerCase();
 class DatabasePoolManager {
   private currentPool: Pool | null = null;
   private currentCredentials: DbCredentials | null = null;
-  private isRefreshing: boolean = false;
+  private isRefreshing = false;
 
   /**
    * Build SSL configuration for AWS RDS
@@ -52,7 +52,10 @@ class DatabasePoolManager {
     if (!this.currentPool) {
       await this.initializePool();
     }
-    return this.currentPool!;
+    if (!this.currentPool) {
+      throw new Error('Failed to initialize database pool');
+    }
+    return this.currentPool;
   }
 
   /**
@@ -156,7 +159,7 @@ class DatabasePoolManager {
       logDebug(context, '[setupEventHandlers] New connection established');
     });
 
-    this.currentPool.on('error', (err: any) => {
+    this.currentPool.on('error', (err: Error & { code?: string }) => {
       logError(context, '[setupEventHandlers] Pool error', err);
 
       // Detect authentication failures (password rotation)
