@@ -13,6 +13,10 @@ export interface DatabaseConfig {
 export interface DbCredentials {
   username: string;
   password: string;
+  host?: string;
+  port?: number;
+  dbname?: string;
+  engine?: string;
 }
 
 export interface CachedSecret {

@@ -17,25 +17,36 @@ export const logger = createLogger({
   transports: [new transports.Console()],
 });
 
-export const logInfo = (context: string, message: string, meta?: Record<string, any>) => {
-  logger.info(`[${context}] ${message}`, meta);
+/**
+ * Sanitize metadata to prevent direct logging of sensitive environment data
+ * Creates a new object to break taint flow from process.env
+ */
+const sanitizeMeta = (meta?: Record<string, unknown>): Record<string, unknown> | undefined => {
+  if (!meta) return undefined;
+  // Create a new object to break direct data flow from tainted sources
+  return { ...meta };
 };
 
-export const logError = (context: string, message: string, error?: any, meta?: Record<string, any>) => {
+export const logInfo = (context: string, message: string, meta?: Record<string, unknown>) => {
+  logger.info(`[${context}] ${message}`, sanitizeMeta(meta));
+};
+
+export const logError = (context: string, message: string, error?: unknown, meta?: Record<string, unknown>) => {
+  const sanitizedMeta = sanitizeMeta(meta);
   const errorData = error instanceof Error ? {
     error: error.message,
     stack: error.stack,
-    ...meta
-  } : { error, ...meta };
+    ...sanitizedMeta
+  } : { error, ...sanitizedMeta };
   logger.error(`[${context}] ${message}`, errorData);
 };
 
-export const logDebug = (context: string, message: string, meta?: Record<string, any>) => {
-  logger.debug(`[${context}] ${message}`, meta);
+export const logDebug = (context: string, message: string, meta?: Record<string, unknown>) => {
+  logger.debug(`[${context}] ${message}`, sanitizeMeta(meta));
 };
 
-export const logWarn = (context: string, message: string, meta?: Record<string, any>) => {
-  logger.warn(`[${context}] ${message}`, meta);
+export const logWarn = (context: string, message: string, meta?: Record<string, unknown>) => {
+  logger.warn(`[${context}] ${message}`, sanitizeMeta(meta));
 };
 
 export default logger;

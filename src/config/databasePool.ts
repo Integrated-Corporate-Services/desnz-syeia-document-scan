@@ -1,112 +1,29 @@
 import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js';
-import type { DatabaseConfig } from '../types/database.types.js';
+import poolManager from './dbPoolManager.js';
 import { DATABASE_CONSTANTS } from '../constants/database.constants.js';
 
-let pool: Pool | null = null;
 const context = 'DatabasePool';
 
 export function getPool(): Pool {
-  if (!pool) {
-    logInfo(context, '[databasePool.ts][getPool] STARTS');
-    
-    const host = process.env.DB_HOST;
-    const port = parseInt(process.env.DB_PORT ?? String(DATABASE_CONSTANTS.DEFAULT_PORT));
-    const database = process.env.DB_NAME;
-    const sslMode = process.env.DB_SSLMODE ?? 'require';
-    
-    let user: string | undefined;
-    let password: string | undefined;
-    
-    if (process.env.DB_CREDENTIALS) {
-      try {
-        const credentials = JSON.parse(process.env.DB_CREDENTIALS);
-        user = credentials.username;
-        password = credentials.password;
-      } catch (error) {
-        logWarn(context, 'Failed to parse DB_CREDENTIALS JSON, falling back to individual env vars', { error: (error as Error).message });
-      }
-    }
-    
-    if (!user) user = process.env.DB_USER;
-    if (!password) password = process.env.DB_PASSWORD;
-    
-    const config: DatabaseConfig = {
-      host,
-      port,
-      database,
-      user,
-      password,
-      ssl: sslMode === 'require' ? { rejectUnauthorized: false } : false,
-      max: parseInt(process.env.DB_POOL_SIZE ?? process.env.DB_POOL_MAX ?? String(DATABASE_CONSTANTS.DEFAULT_POOL_SIZE)),
-      idleTimeoutMillis: DATABASE_CONSTANTS.DEFAULT_IDLE_TIMEOUT_MS,
-      connectionTimeoutMillis: DATABASE_CONSTANTS.DEFAULT_CONNECTION_TIMEOUT_MS,
-    };
+  logDebug(context, '[databasePool.ts][getPool] STARTS');
+  
+  // The pool manager will create the pool lazily on first access
+  // We need to handle this synchronously for backwards compatibility
+  // The pool will be created on first query
+  
+  // For now, we'll throw an error if pool isn't initialized
+  // In practice, async init via poolManager.getPool() should be used
+  throw new Error('Use async getPoolAsync() instead of getPool() for automatic password rotation support');
+}
 
-    logInfo(context, '=== Database Connection Configuration ===', {
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
-      hasPassword: !!config.password,
-      credentialsSource: process.env.DB_CREDENTIALS ? 'DB_CREDENTIALS (Secrets Manager)' : (process.env.DB_PASSWORD ? 'DB_PASSWORD env var' : undefined),
-      sslMode: sslMode,
-      sslEnabled: !!config.ssl,
-      maxConnections: config.max,
-      idleTimeoutMs: config.idleTimeoutMillis,
-      connectionTimeoutMs: config.connectionTimeoutMillis,
-    });
-
-
-    if (!config.host || !config.database || !config.user || !config.password) {
-      const missing = [];
-      if (!config.host) missing.push('DB_HOST');
-      if (!config.database) missing.push('DB_NAME');
-      if (!config.user) missing.push('DB_USER or DB_CREDENTIALS');
-      if (!config.password) missing.push('DB_PASSWORD or DB_CREDENTIALS');
-      
-      logError(context, `CRITICAL: Missing required database environment variables: ${missing.join(', ')}`, new Error('Database configuration incomplete'));
-      logError(context, 'Available environment variables:', {
-        DB_HOST: process.env.DB_HOST,
-        DB_PORT: process.env.DB_PORT,
-        DB_NAME: process.env.DB_NAME,
-        DB_USER: process.env.DB_USER,
-        DB_PASSWORD: process.env.DB_PASSWORD ? '***SET***' : undefined,
-        DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : undefined,
-        DB_SSLMODE: process.env.DB_SSLMODE,
-      });
-      throw new Error(`Missing required database environment variables: ${missing.join(', ')}`);
-    }
-
-    logInfo(context, 'Database configuration validated successfully');
-    logInfo(context, 'Attempting to initialize PostgreSQL connection pool...');
-
-    pool = new Pool(config);
-
-    pool.on('error', (err: Error) => {
-      logError(context, 'Unexpected database pool error', err);
-    });
-
-    pool.on('connect', (client) => {
-      logInfo(context, 'New database connection established successfully');
-      logDebug(context, 'Connection details', {
-        processID: (client as any).processID,
-        serverVersion: (client as any).serverVersion,
-      });
-    });
-
-    pool.on('remove', () => {
-      logDebug(context, 'Database connection removed from pool');
-    });
-
-    pool.on('acquire', () => {
-      logDebug(context, 'Client acquired from pool');
-    });
-
-    logInfo(context, '[databasePool.ts][getPool] Database connection pool initialized successfully');
-    logInfo(context, '[databasePool.ts][getPool] ENDS');
-  }
-  return pool;
+/**
+ * Get pool asynchronously (recommended)
+ * Supports automatic password rotation
+ */
+export async function getPoolAsync(): Promise<Pool> {
+  logDebug(context, '[databasePool.ts][getPoolAsync] Getting pool from manager');
+  return await poolManager.getPool();
 }
 
 export async function query<T extends QueryResultRow = any>(
@@ -128,7 +45,8 @@ export async function query<T extends QueryResultRow = any>(
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await getPool().query<T>(text, values);
+      const pool = await getPoolAsync();
+      const res = await pool.query<T>(text, values);
       const duration = Date.now() - startTime;
 
       logDebug(context, '[databasePool.ts][query] Query executed successfully', {
@@ -213,12 +131,9 @@ export async function testConnection(): Promise<void> {
 export async function closePool(): Promise<void> {
   logInfo(context, '[databasePool.ts][closePool] STARTS');
   
-  if (pool) {
-    logInfo(context, '[databasePool.ts][closePool] Closing database connection pool');
-    await pool.end();
-    pool = null;
-    logInfo(context, '[databasePool.ts][closePool] Database connection pool closed');
-  }
+  logInfo(context, '[databasePool.ts][closePool] Closing database connection pool');
+  await poolManager.closePool();
+  logInfo(context, '[databasePool.ts][closePool] Database connection pool closed');
   
   logInfo(context, '[databasePool.ts][closePool] ENDS');
 }
