@@ -88,9 +88,9 @@ class DatabasePoolManager {
     const originalConnect = pool.connect.bind(pool);
 
     // Wrap query method
-    (pool as any).query = async (...args: any[]) => {
+    (pool as any).query = async (...args: any[]): Promise<any> => {
       try {
-        return await originalQuery(...args);
+        return await (originalQuery as any)(...args);
       } catch (error) {
         if (this.isAuthenticationError(error)) {
           logWarn(context, '[query] Authentication error detected during query - attempting credential refresh');
@@ -106,7 +106,7 @@ class DatabasePoolManager {
               logInfo(context, '[query] Retrying query after credential refresh');
               // Retry once with refreshed pool
               if (this.currentPool) {
-                return await this.currentPool.query.apply(this.currentPool, args);
+                return await (this.currentPool.query as any)(...args);
               }
             } catch (refreshError) {
               logError(context, '[query] Credential refresh failed', refreshError as Error);
@@ -118,9 +118,9 @@ class DatabasePoolManager {
     };
 
     // Wrap connect method
-    (pool as any).connect = async (...args: any[]) => {
+    (pool as any).connect = async (...args: any[]): Promise<any> => {
       try {
-        return await originalConnect(...args);
+        return await (originalConnect as any)(...args);
       } catch (error) {
         if (this.isAuthenticationError(error)) {
           logWarn(context, '[connect] Authentication error detected during connect - attempting credential refresh');
@@ -135,7 +135,7 @@ class DatabasePoolManager {
               logInfo(context, '[connect] Retrying connect after credential refresh');
               // Retry once with refreshed pool
               if (this.currentPool) {
-                return await this.currentPool.connect.apply(this.currentPool, args);
+                return await (this.currentPool.connect as any)(...args);
               }
             } catch (refreshError) {
               logError(context, '[connect] Credential refresh failed', refreshError as Error);
