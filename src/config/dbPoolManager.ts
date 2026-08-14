@@ -85,12 +85,19 @@ class DatabasePoolManager {
    */
   private async loadInitialCredentials(): Promise<DbCredentials> {
     if (process.env.DB_CREDENTIALS) {
+      // Check if DB_CREDENTIALS is a Secrets Manager ARN
+      if (process.env.DB_CREDENTIALS.startsWith('arn:aws:secretsmanager:')) {
+        logInfo(context, '[loadInitialCredentials] DB_CREDENTIALS is an ARN, fetching from Secrets Manager');
+        return await this.fetchCredentialsFromSecretsManager(process.env.DB_CREDENTIALS);
+      }
+      
+      // Otherwise treat as JSON
       try {
         const parsed = JSON.parse(process.env.DB_CREDENTIALS);
         if (!parsed.username || !parsed.password) {
           throw new Error('DB_CREDENTIALS must contain username and password');
         }
-        logInfo(context, '[loadInitialCredentials] Loaded credentials from DB_CREDENTIALS');
+        logInfo(context, '[loadInitialCredentials] Loaded credentials from DB_CREDENTIALS (JSON)');
         return {
           username: parsed.username,
           password: parsed.password,
@@ -99,7 +106,9 @@ class DatabasePoolManager {
           dbname: parsed.dbname,
         };
       } catch (error) {
-        logError(context, '[loadInitialCredentials] Failed to parse DB_CREDENTIALS', error as Error);
+        if (error instanceof SyntaxError) {
+          logError(context, '[loadInitialCredentials] DB_CREDENTIALS is not valid JSON or ARN', error as Error);
+        }
         throw error;
       }
     }
@@ -195,9 +204,15 @@ class DatabasePoolManager {
       return;
     }
 
-    const secretArn = process.env.DB_CREDENTIALS_SECRET_ARN;
+    // Check DB_CREDENTIALS_SECRET_ARN first, then fall back to DB_CREDENTIALS if it's an ARN
+    let secretArn = process.env.DB_CREDENTIALS_SECRET_ARN;
+    if (!secretArn && process.env.DB_CREDENTIALS?.startsWith('arn:aws:secretsmanager:')) {
+      secretArn = process.env.DB_CREDENTIALS;
+      logInfo(context, '[refreshCredentials] Using DB_CREDENTIALS as secret ARN for refresh');
+    }
+    
     if (!secretArn) {
-      logWarn(context, '[refreshCredentials] Cannot refresh - DB_CREDENTIALS_SECRET_ARN not configured');
+      logWarn(context, '[refreshCredentials] Cannot refresh - no Secrets Manager ARN configured');
       return;
     }
 
@@ -252,34 +267,48 @@ class DatabasePoolManager {
     const region = process.env.AWS_REGION || process.env.AWS_Region || 'eu-west-2';
     const client = new SecretsManagerClient({ region });
 
-    logInfo(context, '[fetchCredentialsFromSecretsManager] Calling Secrets Manager', { secretArn });
+    try {
+      logInfo(context, '[fetchCredentialsFromSecretsManager] Calling Secrets Manager', { secretArn });
 
-    const command = new GetSecretValueCommand({ SecretId: secretArn });
-    const response = await client.send(command);
+      const command = new GetSecretValueCommand({ SecretId: secretArn });
+      const response = await client.send(command);
 
-    if (!response.SecretString) {
-      throw new Error('Secret has no SecretString');
+      let secretString: string;
+      
+      // Support both SecretString and SecretBinary
+      if (response.SecretString) {
+        secretString = response.SecretString;
+      } else if (response.SecretBinary) {
+        // Decode binary secret to string
+        const buffer = Buffer.from(response.SecretBinary);
+        secretString = buffer.toString('utf-8');
+      } else {
+        throw new Error('Secret has neither SecretString nor SecretBinary');
+      }
+
+      const parsed = JSON.parse(secretString);
+      
+      if (!parsed.username || !parsed.password) {
+        throw new Error('Secret must contain username and password fields');
+      }
+
+      logInfo(context, '[fetchCredentialsFromSecretsManager] Successfully fetched credentials from Secrets Manager', {
+        hasUsername: !!parsed.username,
+        hasPassword: !!parsed.password,
+        hasHost: !!parsed.host,
+      });
+
+      return {
+        username: parsed.username,
+        password: parsed.password,
+        host: parsed.host,
+        port: parsed.port,
+        dbname: parsed.dbname,
+      };
+    } finally {
+      // Clean up client to prevent socket/file descriptor leaks
+      client.destroy();
     }
-
-    const parsed = JSON.parse(response.SecretString);
-    
-    if (!parsed.username || !parsed.password) {
-      throw new Error('Secret must contain username and password fields');
-    }
-
-    logInfo(context, '[fetchCredentialsFromSecretsManager] Successfully fetched credentials from Secrets Manager', {
-      hasUsername: !!parsed.username,
-      hasPassword: !!parsed.password,
-      hasHost: !!parsed.host,
-    });
-
-    return {
-      username: parsed.username,
-      password: parsed.password,
-      host: parsed.host,
-      port: parsed.port,
-      dbname: parsed.dbname,
-    };
   }
 
   /**

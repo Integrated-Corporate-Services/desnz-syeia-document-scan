@@ -46,22 +46,28 @@ export async function getSecretConfig(
 ): Promise<Record<string, string>> {
   if (!secretArn) throw new Error('Missing secret ARN or name.');
   const client = new SecretsManagerClient({ region });
-  const cmd = new GetSecretValueCommand({ SecretId: secretArn });
-  const res = await client.send(cmd);
-
-  let payload: string;
-  if (res.SecretString) {
-    payload = res.SecretString;
-  } else if (res.SecretBinary) {
-    payload = Buffer.from(res.SecretBinary as unknown as string, 'base64').toString('utf8');
-  } else {
-    throw new Error('Secret has no SecretString or SecretBinary.');
-  }
-
+  
   try {
-    return JSON.parse(payload) as Record<string, string>;
-  } catch {
-    throw new Error('SecretString is not valid JSON.');
+    const cmd = new GetSecretValueCommand({ SecretId: secretArn });
+    const res = await client.send(cmd);
+
+    let payload: string;
+    if (res.SecretString) {
+      payload = res.SecretString;
+    } else if (res.SecretBinary) {
+      payload = Buffer.from(res.SecretBinary as unknown as string, 'base64').toString('utf8');
+    } else {
+      throw new Error('Secret has no SecretString or SecretBinary.');
+    }
+
+    try {
+      return JSON.parse(payload) as Record<string, string>;
+    } catch {
+      throw new Error('SecretString is not valid JSON.');
+    }
+  } finally {
+    // Clean up client to prevent socket/file descriptor leaks
+    client.destroy();
   }
 }
 
