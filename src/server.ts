@@ -18,37 +18,9 @@ const HOST = '0.0.0.0';
   logger.info('DOCUMENT SCAN SERVICE - STARTUP CONFIGURATION');
   logger.info('='.repeat(80));
   
-  logger.info('Environment Variables Loaded:', {
-    NODE_ENV: process.env.NODE_ENV || '',
-    AWS_REGION: process.env.AWS_REGION || process.env.AWS_Region,
-    PORT: PORT,
-    LOG_LEVEL: process.env.LOG_LEVEL,
-  });
+ 
+  logger.info('config Variables Loaded:');
   
-  logger.info('Database Configuration:', {
-    DB_HOST: process.env.DB_HOST,
-    DB_PORT: process.env.DB_PORT,
-    DB_NAME: process.env.DB_NAME,
-    DB_CREDENTIALS: process.env.DB_CREDENTIALS ? '***SET***' : undefined,
-    DB_SSLMODE: process.env.DB_SSLMODE,
-    DB_POOL_SIZE: process.env.DB_POOL_SIZE,
-  });
-  
-  logger.info('S3 Configuration:', {
-    UPLOAD_BUCKET: process.env.UPLOAD_BUCKET,
-    CLEAN_BUCKET: process.env.CLEAN_BUCKET,
-    QUARANTINE_BUCKET: process.env.QUARANTINE_BUCKET,
-  });
-  
-  logger.info('SQS Configuration:', {
-    SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
-  });
-  
-  logger.info('ClamAV Configuration:', {
-    CLAMAV_HOST: process.env.CLAMAV_HOST,
-    CLAMAV_PORT: process.env.CLAMAV_PORT,
-    SIMULATE_SCAN: process.env.SIMULATE_SCAN,
-  });
   
   logger.info('='.repeat(80));
   
