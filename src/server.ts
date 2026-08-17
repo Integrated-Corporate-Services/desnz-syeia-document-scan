@@ -13,17 +13,6 @@ const HOST = '0.0.0.0';
 
 (async () => {
   logger.info('[server.ts][main] STARTS');
-  
-  logger.info('='.repeat(80));
-  logger.info('DOCUMENT SCAN SERVICE - STARTUP CONFIGURATION');
-  logger.info('='.repeat(80));
-  
- 
-  logger.info('config Variables Loaded:');
-  
-  
-  logger.info('='.repeat(80));
-  
   logger.info('[server.ts][main] Starting HTTP server...');
   const wrapper = express();
 
