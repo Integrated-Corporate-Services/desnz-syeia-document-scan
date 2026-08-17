@@ -7,6 +7,7 @@ import { startWorker, stopWorker } from './worker.js';
 import { getSqsConfig } from './config/config.js';
 import getLogger from './utils/loggerHelper.js';
 
+
 const logger = getLogger('server');
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3004;
 const HOST = '0.0.0.0';
