@@ -1,7 +1,7 @@
 import express from 'express';
 import http from 'http';
 import { createApp, setReady } from './app.js';
-import { getPool, testConnection, closePool } from './config/databasePool.js';
+import { getPoolAsync, testConnection, closePool } from './config/databasePool.js';
 import { checkS3Connectivity } from './config/s3Client.js';
 import { startWorker, stopWorker } from './worker.js';
 import { getSqsConfig } from './config/config.js';
@@ -46,7 +46,7 @@ const HOST = '0.0.0.0';
   });
 
   logger.info('[server.ts][main] Initialising database connection pool…');
-  getPool();
+  await getPoolAsync();
   logger.info('[server.ts][main] Database pool created, testing connection…');
   await testConnection();
   logger.info('[server.ts][main] Database connection verified successfully');
