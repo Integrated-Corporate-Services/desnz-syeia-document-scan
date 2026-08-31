@@ -116,39 +116,55 @@ export class ProcessFileScanWorkflow {
         throw new Error('S3 clean/quarantine bucket configuration is missing');
       }
 
-      const destinationBucket = scanResult.isClean ? cleanBucket : quarantineBucket;
-      const destinationKey = uploadKey;
       const resultLabel = scanResult.isClean ? SCAN_RESULT.CLEAN : SCAN_RESULT.INFECTED;
 
-      // Production default: delete upload original after copy so downloads only use clean/quarantine.
+      // Production default: delete upload original after copy so downloads only use clean bucket.
       // KEEP_UPLOAD_ORIGINALS=true is a local-only override (does not change DB bucket_name).
       const keepUploadOriginal = process.env.KEEP_UPLOAD_ORIGINALS === 'true';
 
-      logDebug('ProcessFileScanWorkflow', 'Copying file to segregation bucket', {
-        fileId,
-        sourceBucket: uploadBucket,
-        sourceKey: uploadKey,
-        destinationBucket,
-        destinationKey,
-        scanResult: resultLabel,
-        keepUploadOriginal,
-      });
-      await this.s3Service.copyFile(
-        uploadBucket,
-        uploadKey,
-        destinationBucket,
-        destinationKey
-      );
-      logInfo('ProcessFileScanWorkflow', 'File copied to segregation bucket', {
-        fileId,
-        destinationBucket,
-        destinationKey,
-      });
+      let downloadBucket: string;
 
-      // KEEP_UPLOAD_ORIGINALS=true keeps the original object AND the DB bucket_name on
-      // the upload bucket (local SSO downloads). In production the original is deleted and
-      // bucket_name points at the clean/quarantine bucket.
-      const downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
+      if (scanResult.isClean) {
+        // Clean files: copy to clean bucket and optionally delete from upload bucket
+        const destinationBucket = cleanBucket;
+        const destinationKey = uploadKey;
+
+        logDebug('ProcessFileScanWorkflow', 'Copying clean file to segregation bucket', {
+          fileId,
+          sourceBucket: uploadBucket,
+          sourceKey: uploadKey,
+          destinationBucket,
+          destinationKey,
+          scanResult: resultLabel,
+          keepUploadOriginal,
+        });
+        await this.s3Service.copyFile(
+          uploadBucket,
+          uploadKey,
+          destinationBucket,
+          destinationKey
+        );
+        logInfo('ProcessFileScanWorkflow', 'Clean file copied to segregation bucket', {
+          fileId,
+          destinationBucket,
+          destinationKey,
+        });
+
+        // KEEP_UPLOAD_ORIGINALS=true keeps the original object AND the DB bucket_name on
+        // the upload bucket (local SSO downloads). In production the original is deleted and
+        // bucket_name points at the clean bucket.
+        downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
+      } else {
+        // Infected files: keep in upload bucket, do NOT copy to quarantine
+        logInfo('ProcessFileScanWorkflow', 'Infected file detected, keeping in upload bucket (not moving to quarantine)', {
+          fileId,
+          uploadBucket,
+          uploadKey,
+          virusName: scanResult.virusName,
+          scanResult: resultLabel,
+        });
+        downloadBucket = uploadBucket;
+      }
 
       // Persist scan result + download bucket BEFORE deleting the original, so a delete
       // failure can never leave the DB pointing at a bucket whose object no longer exists.
@@ -180,9 +196,10 @@ export class ProcessFileScanWorkflow {
         });
       }
 
-      if (!keepUploadOriginal) {
+      // Only delete from upload bucket for CLEAN files (infected files always stay in upload bucket)
+      if (scanResult.isClean && !keepUploadOriginal) {
         // Best-effort removal of the original now that the DB is consistent, so downloads
-        // only come from clean/quarantine locations.
+        // only come from clean bucket.
         try {
           await this.s3Service.deleteFile(uploadBucket, uploadKey);
           logInfo('ProcessFileScanWorkflow', 'Original removed from upload bucket', {
@@ -198,11 +215,19 @@ export class ProcessFileScanWorkflow {
             error: (deleteError as Error).message,
           });
         }
-      } else {
+      } else if (scanResult.isClean && keepUploadOriginal) {
         logInfo('ProcessFileScanWorkflow', 'Keeping original in upload bucket (KEEP_UPLOAD_ORIGINALS=true)', {
           fileId,
           uploadBucket,
           uploadKey,
+        });
+      } else {
+        // Infected file - always kept in upload bucket
+        logInfo('ProcessFileScanWorkflow', 'Infected file kept in upload bucket', {
+          fileId,
+          uploadBucket,
+          uploadKey,
+          virusName: scanResult.virusName,
         });
       }
 
