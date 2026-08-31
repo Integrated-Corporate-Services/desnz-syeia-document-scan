@@ -150,12 +150,10 @@ export class ProcessFileScanWorkflow {
           destinationKey,
         });
 
-        // KEEP_UPLOAD_ORIGINALS=true keeps the original object AND the DB bucket_name on
-        // the upload bucket (local SSO downloads). In production the original is deleted and
-        // bucket_name points at the clean bucket.
+
         downloadBucket = keepUploadOriginal ? uploadBucket : destinationBucket;
       } else {
-        // Infected files: keep in upload bucket, do NOT copy to quarantine
+       
         logInfo('ProcessFileScanWorkflow', 'Infected file detected, keeping in upload bucket (not moving to quarantine)', {
           fileId,
           uploadBucket,
