@@ -452,6 +452,7 @@ class DatabasePoolManager {
       logInfo(context, '[closePool] Closing connection pool');
       await this.currentPool.end();
       this.currentPool = null;
+      this.isWrapped = false; // Reset wrapping flag to allow re-initialization
       logInfo(context, '[closePool] Connection pool closed');
     }
   }
