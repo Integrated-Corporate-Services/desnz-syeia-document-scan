@@ -33,6 +33,7 @@ class DatabasePoolManager {
   private currentPool: Pool | null = null;
   private currentCredentials: DbCredentials | null = null;
   private isRefreshing = false;
+  private isWrapped = false; // Track if pool has been wrapped to prevent re-wrapping
 
   /**
    * Build SSL configuration for AWS RDS
@@ -64,7 +65,7 @@ class DatabasePoolManager {
 
   /**
    * Get current pool instance (creates if needed)
-   * Returns a wrapped pool that handles authentication failures with automatic refresh
+   * Returns the pool (wrapped only once during initialization)
    */
   async getPool(): Promise<Pool> {
     if (!this.currentPool) {
@@ -74,8 +75,8 @@ class DatabasePoolManager {
       throw new Error('Failed to initialize database pool');
     }
     
-    // Wrap the pool to intercept authentication failures
-    return this.wrapPoolWithAutoRefresh(this.currentPool);
+    // Return unwrapped pool reference - wrapping happens once in initializePool
+    return this.currentPool;
   }
 
   /**
@@ -158,6 +159,13 @@ class DatabasePoolManager {
 
     const poolConfig = this.createPoolConfig(credentials);
     this.currentPool = new Pool(poolConfig);
+
+    // Wrap pool only once during initialization
+    if (!this.isWrapped) {
+      this.currentPool = this.wrapPoolWithAutoRefresh(this.currentPool);
+      this.isWrapped = true;
+      logDebug(context, '[initializePool] Pool wrapped with auto-refresh capability');
+    }
 
     this.setupEventHandlers();
 
@@ -416,12 +424,21 @@ class DatabasePoolManager {
       logInfo(context, '[recreatePool] Closing old connection pool');
       await this.currentPool.end();
       this.currentPool = null;
+      this.isWrapped = false; // Reset wrapping flag for new pool
     }
 
     // Create new pool
     this.currentCredentials = newCredentials;
     const poolConfig = this.createPoolConfig(newCredentials);
     this.currentPool = new Pool(poolConfig);
+    
+    // Wrap the new pool
+    if (!this.isWrapped) {
+      this.currentPool = this.wrapPoolWithAutoRefresh(this.currentPool);
+      this.isWrapped = true;
+      logDebug(context, '[recreatePool] New pool wrapped with auto-refresh capability');
+    }
+    
     this.setupEventHandlers();
 
     logInfo(context, '[recreatePool] New connection pool created successfully');
@@ -435,6 +452,7 @@ class DatabasePoolManager {
       logInfo(context, '[closePool] Closing connection pool');
       await this.currentPool.end();
       this.currentPool = null;
+      this.isWrapped = false; // Reset wrapping flag to allow re-initialization
       logInfo(context, '[closePool] Connection pool closed');
     }
   }
