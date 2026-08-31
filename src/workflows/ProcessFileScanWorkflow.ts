@@ -236,7 +236,6 @@ export class ProcessFileScanWorkflow {
         eventId,
         isClean: scanResult.isClean,
         virusName: scanResult.virusName,
-        destinationBucket,
         downloadBucket,
       });
     } catch (error) {
